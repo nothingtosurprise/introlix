@@ -31,30 +31,31 @@ classifiers = [
 ]
 
 dependencies = [
-    "python-dotenv>=1.0.1",
-    "requests>=2.32.5",
-    "llama-cpp-python>=0.3.16",
-    "feedparser>=6.0.11",
-    "beautifulsoup4>=4.13.5",
-    "platformdirs>=4.3.8",
-    "fastapi>=0.116.1",
-    "uvicorn>=0.37.0",
-    "torch>=2.8.0",
-    "aiohttp>=3.12.15",
+    "python-dotenv>=1.2.2",
+    "requests>=2.34.1",
+    "llama-cpp-python>=0.3.23",
+    "feedparser>=6.0.12",
+    "beautifulsoup4>=4.14.3",
+    "platformdirs>=4.9.6",
+    "fastapi>=0.136.1",
+    "uvicorn>=0.46.0",
+    "torch>=2.12.0",
+    "aiohttp>=3.13.5",
+    "httpx>=0.28.1",
     "trafilatura>=2.0.0",
-    "pdfplumber>=0.11.7",
-    "tiktoken>=0.11.0",
-    "pinecone>=8.0.0",
+    "pdfplumber>=0.11.9",
+    "tiktoken>=0.12.0",
+    "pinecone>=9.0.0",
     "motor>=3.7.1",
-    "sentence-transformers>=5.1.2",
-    "playwright>=1.56.0",
+    "sentence-transformers>=5.5.0",
+    "playwright>=1.59.0",
 ]
 [tool.setuptools.packages.find]
 include = ["introlix*"]
 exclude = ["web*"]
 
 [project.urls]
-Homepage = "https://github.com/introlix/introlix"
-Repository = "https://github.com/introlix/introlix"
-Documentation = "https://github.com/introlix/introlix/tree/main/docs"
-"Bug Tracker" = "https://github.com/introlix/introlix/issues"
+Homepage = "https://github.com/introlix/introlix-app"
+Repository = "https://github.com/introlix/introlix-app"
+Documentation = "https://github.com/introlix/introlix-app/tree/main/docs"
+"Bug Tracker" = "https://github.com/introlix/introlix-app/issues"

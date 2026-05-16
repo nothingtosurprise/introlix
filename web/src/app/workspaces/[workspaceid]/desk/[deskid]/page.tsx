@@ -194,12 +194,12 @@ export default function ResearchDeskDetails() {
 
   // Everything is ready
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-screen w-full overflow-hidden">
-      <ResizablePanel defaultSize={75} minSize={50}>
+    <ResizablePanelGroup orientation="horizontal" className="h-screen w-full overflow-hidden">
+      <ResizablePanel defaultSize="75" minSize="50">
         <TextEditor workspaceId={workspaceId} deskId={deskId} />
       </ResizablePanel>
       <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
+      <ResizablePanel defaultSize="25" minSize="15" maxSize="40">
         <DeskAIPannel workspaceId={workspaceId} deskId={deskId} messages={desk?.messages || []} />
       </ResizablePanel>
     </ResizablePanelGroup>

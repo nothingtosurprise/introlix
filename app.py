@@ -5,9 +5,11 @@ from introlix.database import db, serialize_doc, validate_object_id
 from introlix.models import Workspace
 from introlix.schemas import PaginatedResponse
 from introlix.routes.chat import chat_router
+from introlix.tools.web_crawler import get_httpx_client, get_browser, shutdown
 from introlix.routes.research_desk import research_desk_router
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import DESCENDING
+from contextlib import asynccontextmanager
 
 app = FastAPI(title="Introlix", openapi_prefix="/api/v1")
 pc = Pinecone(api_key=PINECONE_KEY)
@@ -20,6 +22,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await get_httpx_client()
+    await get_browser()
+    yield
+    await shutdown() # Shutdown the HTTPX client and browser when the app stops
 
 # workspace endpoints
 @app.post("/workspaces", tags=["workspace"])

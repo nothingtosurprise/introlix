@@ -69,7 +69,7 @@ class ExplorerAgent:
     def __init__(self):
         self.pc = Pinecone(api_key=PINECONE_KEY)
         self.index_name = "explored-data-index"
-        self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        self.embedding_model = SentenceTransformer("all-mpnet-base-v2")
         self.MAX_CONCURRENT_URLS = 30
         self._setup_index()
 
@@ -183,19 +183,17 @@ class ExplorerAgent:
         try:
             results_ = self.index.search(
                 namespace="Search",
-                query={
-                    "top_k": 3,
-                    "inputs": {"text": query},
-                    "filter": {"unique_id": self.unique_id},
-                },
+                inputs={"text": query},
+                filter={"unique_id": self.unique_id},
+                top_k=self.max_results,
             )
 
             hits = results_.get("result", {}).get("hits", [])
 
             threshold = 0.50
             filtered_hits = [
-                hit for hit in hits 
-                if hit.get("_score", 0) >= threshold
+                hit for hit in hits
+                if hit.score >= threshold
             ]
             for hit in filtered_hits:
                 try:
@@ -205,7 +203,7 @@ class ExplorerAgent:
                         "description": hit.get("fields", {}).get("description", ""),
                         "url": hit.get("fields", {}).get("url", ""),
                         "chunk_text": hit.get("fields", {}).get("chunk_text", ""),
-                        "score": hit.get("_score", 0.0),
+                        "score": hit.get("score", 0.0),
                     }
                     if not data["chunk_text"]:
                         continue
@@ -248,14 +246,9 @@ class ExplorerAgent:
             )
 
             crawl_tasks = []
-
-            async def filter_existing_urls(result):
-                if not self.is_url_exists(result.url):
-                    return result.url
-                return None
             
-            tasks = [filter_existing_urls(result) for result in search_results]
-            task_results = await asyncio.gather(*tasks, return_exceptions=True)
+            existing = await asyncio.to_thread(self.is_url_exists, [r.url for r in search_results])
+            urls_to_crawl = [r.url for r in search_results if r.url not in existing]
 
 
             url_semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_URLS)
@@ -264,7 +257,7 @@ class ExplorerAgent:
                 async with url_semaphore:
                     return await self._crawl_and_chunk(query, url)
 
-            for url in task_results:
+            for url in urls_to_crawl:
                 if isinstance(url, Exception):
                     print(f"Error checking URL existence: {url}")
                     continue
@@ -318,6 +311,10 @@ class ExplorerAgent:
 
             chunk_texts = [chunk["text"] for chunk in chunks]
 
+            # There is many empty chunks
+            if not chunk_texts:
+                return []
+
             query_embedding = self.embedding_model.encode_query(query)
             chunk_embeddings = self.embedding_model.encode_document(chunk_texts, batch_size=32)
 
@@ -342,21 +339,23 @@ class ExplorerAgent:
                         "chunk_text": chunk["text"],
                     }
                     relevant_chunks.append(chunk_record)
-
             return relevant_chunks
         except Exception as e:
             print(f"Error processing {url}: {e}")
             return []
 
-    def is_url_exists(self, url: str) -> bool:
-        url_hash = hashlib.md5(url.encode()).hexdigest()
-        result = self.index.fetch(ids=[f"{url_hash}_chunk_0"])
+    def is_url_exists(self, urls: list[str]) -> set[str]:
+        ids = [f"{hashlib.md5(u.encode()).hexdigest()}_chunk_0" for u in urls]
+        result = self.index.fetch(ids=ids)
+        existing = set()
 
-        if len(result.vectors) > 0:
-            vector = result.vectors.get(f"{url_hash}_chunk_0")
-            if vector and vector.get("metadata", {}).get("unique_id") == self.unique_id:
-                return True
-        return False
+        for url, _id in zip(urls, ids):
+            if _id in result.vectors:
+                v = result.vectors[_id]
+                if v.get("metadata", {}).get("unique_id") == self.unique_id:
+                    existing.add(url)
+
+        return existing
 
     def delete_workspace_data(self):
         self.index.delete(filter={"unique_id": self.unique_id})
