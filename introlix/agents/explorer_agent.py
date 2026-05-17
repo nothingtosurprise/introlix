@@ -46,14 +46,14 @@ import asyncio
 
 import hashlib
 from typing import List, Union
-from pinecone import Pinecone
 from pydantic import BaseModel, Field
 from introlix.config import PINECONE_KEY
 from introlix.tools.web_crawler import web_crawler, ScrapeResult
 from introlix.tools.web_search import SearXNGClient
 from introlix.utils.text_chunker import TextChunker
+from introlix.state import app_state
 from sentence_transformers import SentenceTransformer
-
+from pinecone import Pinecone
 
 class ExplorerAgentOutput(BaseModel):
     title: str = Field(description="The list title of the web page")
@@ -67,9 +67,9 @@ class ExplorerAgentOutput(BaseModel):
 
 class ExplorerAgent:
     def __init__(self):
-        self.pc = Pinecone(api_key=PINECONE_KEY)
+        self.pc = app_state.pc or Pinecone(api_key=PINECONE_KEY)
         self.index_name = "explored-data-index"
-        self.embedding_model = SentenceTransformer("all-mpnet-base-v2")
+        self.embedding_model = app_state.embedding_model or SentenceTransformer("all-mpnet-base-v2")
         self.MAX_CONCURRENT_URLS = 30
         self._setup_index()
 

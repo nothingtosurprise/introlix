@@ -5,7 +5,7 @@ This module provides the ChatAgent class, an intelligent conversational agent wi
 internet search capabilities. The agent can:
 
 - Maintain conversation history across multiple turns
-- Use search tools to gather current information
+- Use search tools to gather current information but for quick search that doesn't require comprehensive results it can use fast_search tool which uses DDGS
 - Reason about whether it needs more information
 - Stream responses back to users in real-time
 - Make decisions about tool usage vs. direct answers
@@ -27,6 +27,7 @@ from introlix.agents.baseclass import (
 from introlix.agents.explorer_agent import ExplorerAgent
 from introlix.llm_config import cloud_llm_manager
 from introlix.config import CLOUD_PROVIDER
+from ddgs import DDGS
 
 
 class ToolCall(BaseModel):
@@ -54,7 +55,7 @@ class AgentDecision(BaseModel):
 
 INSTRUCTION = """
 You are Introlix Chat a part of Introlix. You task is to chat with user and answer to users query. Today's date is {date}. Always provide up-to-date information.
-You have access to internet search using search tool. You have access to mutliple tools:
+You have access to internet search using search and fast_search tool. You have access to mutliple tools:
 {tools}
 
 Decision format (respond in JSON):
@@ -67,7 +68,7 @@ Decision format (respond in JSON):
 }}
 
 Guidelines:
-1. Always use search tool when you needs to get latest information or you don't know the answer.
+1. Always use search or fast_search tool when you needs to get latest information or you don't know the answer.
 2. Don't make a fake or dummy data when you don't know. If a user asks anything that you don't know or you need more information then you again you search tool.
 3. If you already know the answer, set type="final" immediately
 4. If tool results are sufficient, set needs_more_info=false
@@ -83,7 +84,7 @@ User: "Compare GPT-5 and Gemini 2.5"
 Response: {{"type": "tool", "thought": "Need to search both", "tool_calls": [{{"name": "search", "input": {{"queries": ["GPT-5 features", "Gemini 2.5 features"]}}}}], "needs_more_info": false}}
 
 User: "What's the weather in Paris?"
-Response: {{"type": "tool", "thought": "Need current weather data", "tool_calls": [{{"name": "search", "input": {{"queries": ["weather in Paris today"]}}}}], "needs_more_info": false}}
+Response: {{"type": "tool", "thought": "Need current weather data", "tool_calls": [{{"name": "fast_search", "input": {{"queries": ["weather in Paris today"]}}}}], "needs_more_info": false}}
 """
 
 
@@ -93,7 +94,7 @@ class ChatAgent(BaseAgent):
 
     This agent can:
     1. Maintain conversation history.
-    2. Use tools (specifically search) to gather information.
+    2. Use tools (specifically search or fast_search) to gather information.
     3. Reason about whether it needs more information or can answer directly.
     4. Stream its response back to the user.
 
@@ -133,7 +134,7 @@ class ChatAgent(BaseAgent):
         super().__init__(model, config, max_iterations)
 
         self.unique_id = unique_id
-        self.tools = [{"name": "search", "description": "Search on internet."}]
+        self.tools = [{"name": "search", "description": "Search on internet."}, {"name": "fast_search", "description": "A faster search tool using DDGS."}]
 
         self.explorer = ExplorerAgent()
 
@@ -149,6 +150,23 @@ class ChatAgent(BaseAgent):
         Returns:
             List[Tool]: A list of Tool objects available to the agent.
         """
+
+        async def fast_search(queries: List[str] = None, query: str = None) -> str:
+            """Search tool that accepts both 'queries' and 'query' for flexibility - FAST VERSION USING DDGS"""
+
+            # Handle query format
+            if query is not None and queries is None:
+                queries = [query]
+            elif queries is None:
+                return "Error: No search queries provided"
+
+            ddgs_client = DDGS()
+            results = []
+            for q in queries:
+                search_results = ddgs_client.text(q, max_results=5)
+                results.append(f"Results for '{q}':\n" + "\n".join(str(search_results)))
+
+            return "\n\n---\n\n".join(results)
 
         async def search(queries: List[str] = None, query: str = None) -> str:
             """Search tool that accepts both 'queries' and 'query' for flexibility"""
@@ -173,7 +191,12 @@ class ChatAgent(BaseAgent):
                 name="search",
                 description="Search the internet for information. Use this tool when you need current data or facts you don't know. IMPORTANT: Input must be a dictionary with 'queries' key containing a list of search queries. For single searches, pass one query in the list; for multiple searches, pass multiple queries. Examples: Single search: {'queries': ['weather in Paris']} | Multiple searches: {'queries': ['GPT-5 features', 'Gemini 2.5 features']} | Always use 'queries' (plural) not 'query'.",
                 function=search,
-            )
+            ),
+            Tool(
+                name="fast_search",
+                description="A faster search tool using DDGS. Use this when you need a quick search result and can tolerate less comprehensive results. Input format is the same as 'search' tool.",
+                function=fast_search,
+            ),
         ]
 
     def _build_messages_array(
@@ -440,7 +463,7 @@ class ChatAgent(BaseAgent):
 
 
 async def main():
-    agent = ChatAgent(unique_id="user1", model="gemini-2.5-flash")
+    agent = ChatAgent(unique_id="user1", model="gemini-3.1-flash-lite")
 
     async for chunk in agent.arun("Current PM of Nepal?"):
         print(chunk, end="", flush=True)

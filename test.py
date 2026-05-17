@@ -1,6 +1,5 @@
-import asyncio
-from introlix.utils.title_gen import generate_title
+from ddgs import DDGS
 
-print("Title generation module imported successfully.")
-title = "Sample research prompt for testing."
-print(asyncio.run(generate_title(title)))
+if __name__ == "__main__":
+    results = DDGS().text("Who is PM of Nepal", max_results=5)
+    print(results)

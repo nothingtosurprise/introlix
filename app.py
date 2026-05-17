@@ -10,6 +10,9 @@ from introlix.routes.research_desk import research_desk_router
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import DESCENDING
 from contextlib import asynccontextmanager
+from introlix.state import app_state
+from introlix.config import PINECONE_KEY
+from sentence_transformers import SentenceTransformer
 
 app = FastAPI(title="Introlix", openapi_prefix="/api/v1")
 pc = Pinecone(api_key=PINECONE_KEY)
@@ -24,6 +27,11 @@ app.add_middleware(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # adding embedding model and pinecone client to app state
+    app_state.embedding_model = SentenceTransformer("all-mpnet-base-v2")
+    app_state.pc = Pinecone(api_key=PINECONE_KEY)
+
+    # explorer agent setup
     await get_httpx_client()
     await get_browser()
     yield
