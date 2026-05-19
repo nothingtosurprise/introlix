@@ -18,16 +18,12 @@ import { useChatDesk, useEditDocument, useDesk } from "@/hooks/use-desk";
 import { Message } from "@/lib/types";
 import { ChatMessages } from "@/components/chat-messages";
 import { Textarea } from "./ui/textarea";
+import { useModelsList } from "@/hooks/use-chat";
 
-type ModelType = "auto" | "gpt-5" | "claude-sonnet-4" | "deepseek/deepseek-v3.2-exp" | "google/gemini-2.5-pro";
 type ModeType = "ask" | "edit";
 
-const MODEL_DISPLAY: Record<ModelType, string> = {
+const MODEL_DISPLAY: Record<string, string> = {
   "auto": "Auto",
-  "gpt-5": "GPT-5",
-  "claude-sonnet-4": "Claude Sonnet 4",
-  "deepseek/deepseek-v3.2-exp": "Deepseek",
-  "google/gemini-2.5-pro": "Gemini 2.5 Pro",
 };
 
 const MODE_DISPLAY: Record<ModeType, { label: string; icon: React.ElementType }> = {
@@ -45,13 +41,21 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
   const [mode, setMode] = useState<ModeType>("ask");
   const [message, setMessage] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<ModelType>("auto");
+  const [selectedModel, setSelectedModel] = useState<string>("auto");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
-  const models: ModelType[] = ["auto", "gpt-5", "claude-sonnet-4", "deepseek/deepseek-v3.2-exp", "google/gemini-2.5-pro"];
+  const models_list = useModelsList();
+
+  const models: string[] = ["auto", ...(models_list.data?.map((m) => m.value) ?? [])];
+  // adding models name inside MODEL_DISPLAY if not already present
+  models_list.data?.forEach((model) => {
+    if (!MODEL_DISPLAY[model.value]) {
+      MODEL_DISPLAY[model.value] = model.name;
+    }
+  })
 
   const { streamingMessage, isStreaming, startStreaming } = useChatDesk({
     onComplete: async () => {
@@ -71,7 +75,6 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
   }, [message]);
 
   const { mutate: editDocument, isPending: isEditing } = useEditDocument();
-  const { data: desk } = useDesk(workspaceId, deskId);
 
   const handleSubmit = async (overrideMessage?: string | React.MouseEvent | React.KeyboardEvent) => {
     const textToSubmit = typeof overrideMessage === "string" ? overrideMessage : message;

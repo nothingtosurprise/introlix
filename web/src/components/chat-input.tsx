@@ -11,13 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useModelsList } from "@/hooks/use-chat";
 
-type ModelType = "auto" | "gpt-5" | "claude-sonnet-4" | "deepseek/deepseek-v3.2-exp" | "google/gemini-2.5-pro";
 type AgentType = "verifier" | "knowledge-gap" | "research-assistant" | "code-reviewer" | null;
 
-/**
- * Chat input component with model selection, file upload, and search toggle
- */
+
 interface ChatInputProps {
   onSubmit: (data: {
     prompt: string;
@@ -29,12 +27,8 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
-const MODEL_DISPLAY: Record<ModelType, string> = {
+const MODEL_DISPLAY: Record<string, string> = {
   "auto": "Auto",
-  "gpt-5": "GPT-5",
-  "claude-sonnet-4": "Claude Sonnet 4",
-  "deepseek/deepseek-v3.2-exp": "Deepseek",
-  "google/gemini-2.5-pro": "Gemini 2.5 Pro",
 };
 
 const AGENT_DISPLAY: Record<Exclude<AgentType, null>, string> = {
@@ -47,14 +41,23 @@ const AGENT_DISPLAY: Record<Exclude<AgentType, null>, string> = {
 export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<ModelType>("auto");
+  const [selectedModel, setSelectedModel] = useState<string>("auto");
   const [selectedAgent, setSelectedAgent] = useState<AgentType>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const models: ModelType[] = ["auto", "gpt-5", "claude-sonnet-4", "deepseek/deepseek-v3.2-exp", "google/gemini-2.5-pro"];
+  const models_list = useModelsList();
+
+  const models: string[] = ["auto", ...(models_list.data?.map((m) => m.value) ?? [])];
+  // adding models name inside MODEL_DISPLAY if not already present
+  models_list.data?.forEach((model) => {
+    if(!MODEL_DISPLAY[model.value]) {
+      MODEL_DISPLAY[model.value] = model.name;
+    }
+  })
+
   const agents: Exclude<AgentType, null>[] = [
     "verifier",
     "knowledge-gap",
@@ -119,7 +122,7 @@ export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps
             placeholder="How can I help you today?"
             disabled={disabled}
             rows={1}
-            className="w-full min-h-[24px] max-h-[200px] resize-none border-0 bg-transparent p-0 text-base focus:outline-none placeholder:text-muted-foreground overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full min-h-6 max-h-50 resize-none border-0 bg-transparent p-0 text-base focus:outline-none placeholder:text-muted-foreground overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
 
@@ -131,7 +134,7 @@ export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps
                 className="flex items-center gap-1 text-sm bg-secondary px-2 py-1 rounded-md"
               >
                 <FileText className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate max-w-[120px]">{file.name}</span>
+                <span className="truncate max-w-30">{file.name}</span>
                 <button onClick={() => removeFile(index)} disabled={disabled}>
                   <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
                 </button>

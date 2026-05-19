@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo import DESCENDING
 from contextlib import asynccontextmanager
 from introlix.state import app_state
-from introlix.config import PINECONE_KEY
+from introlix.config import PINECONE_KEY, SUPPORTED_LLMs
 from sentence_transformers import SentenceTransformer
 
 app = FastAPI(title="Introlix", openapi_prefix="/api/v1")
@@ -36,6 +36,11 @@ async def lifespan(app: FastAPI):
     await get_browser()
     yield
     await shutdown() # Shutdown the HTTPX client and browser when the app stops
+
+# list of supported LLMs
+@app.get("/llms", tags=["llms"])
+def get_supported_llms():
+    return {"items": SUPPORTED_LLMs}
 
 # workspace endpoints
 @app.post("/workspaces", tags=["workspace"])

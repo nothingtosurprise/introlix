@@ -29,7 +29,6 @@ from introlix.llm_config import cloud_llm_manager
 from introlix.config import CLOUD_PROVIDER
 from ddgs import DDGS
 
-
 class ToolCall(BaseModel):
     """Structured tool call from LLM"""
 
@@ -312,6 +311,8 @@ class ChatAgent(BaseAgent):
                 messages=messages, stream=False
             )
 
+            print(f"Raw LLM output (iteration {iteration + 1}): {raw_output}")
+
             try:
                 # Cleaning the raw_output
                 raw_output = raw_output.strip()
@@ -463,9 +464,9 @@ class ChatAgent(BaseAgent):
 
 
 async def main():
-    agent = ChatAgent(unique_id="user1", model="gemini-3.1-flash-lite")
+    agent = ChatAgent(unique_id="user1", model="gemini-3.1-pro-preview")
 
-    async for chunk in agent.arun("Current PM of Nepal?"):
+    async for chunk in agent.arun("Hello"):
         print(chunk, end="", flush=True)
 
 

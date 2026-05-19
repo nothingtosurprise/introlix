@@ -28,3 +28,11 @@ if CLOUD_PROVIDER == "openrouter":
     AUTO_MODEL = "deepseek/deepseek-v4-flash:free"
 elif CLOUD_PROVIDER == "google_ai_studio":
     AUTO_MODEL = "gemini-3.1-flash-lite"
+
+# Supported LLMs
+SUPPORTED_LLMs = [
+    {"name": "DeepSeek V4 Flash", "value": "deepseek/deepseek-v4-flash:free", "provider": "openrouter"},
+    {"name": "Gemini 3.1 Flash Lite", "value": "gemini-3.1-flash-lite", "provider": "google_ai_studio"},
+    {"name": "Gemini 3.1 Pro Preview", "value": "gemini-3.1-pro-preview", "provider": "google_ai_studio"},
+    {"name": "Gemini 3.1 Flash Lite Preview", "value": "gemini-3.1-flash-lite-preview", "provider": "google_ai_studio"},
+]

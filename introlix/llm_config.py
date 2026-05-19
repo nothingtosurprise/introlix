@@ -1,5 +1,6 @@
 from typing import List, Dict, Union, AsyncGenerator
 from introlix.services.LLMState import LLMState
+from introlix.config import SUPPORTED_LLMs
 
 llm_state = LLMState()
 
@@ -22,6 +23,11 @@ async def cloud_llm_manager(
     Returns:
         Response object or async generator for streaming.
     """
+    for supported in SUPPORTED_LLMs:
+        if model_name == supported["value"]:
+            provider = supported["provider"]
+            break
+
     if provider == "openrouter":
         response = await llm_state.get_open_router(
             model_name=model_name, messages=messages, stream=stream

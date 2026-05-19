@@ -107,3 +107,8 @@ export interface ContextAgentStep {
   research_parameters: Record<string, unknown> | null;
   state: string;
 }
+
+export interface ModelListResponse {
+  name: string;
+  value: string;
+}

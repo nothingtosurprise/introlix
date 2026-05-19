@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type, Callable, Union, AsyncGenerator
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from introlix.config import CLOUD_PROVIDER
+from introlix.config import SUPPORTED_LLMs
 from introlix.llm_config import cloud_llm_manager
 
 DEFAULT_AGENT_NAME = "Agent"
@@ -166,6 +166,10 @@ class BaseAgent(ABC):
         self.instruction = ""
         self.max_iterations = max_iterations
 
+        for supported in SUPPORTED_LLMs:
+                if self.model == supported["value"]:
+                    self.CLOUD_PROVIDER = supported["provider"]
+
     async def _call_llm(
         self, prompt: str, cloud: bool = True, stream: bool = False
     ) -> Union[str, AsyncGenerator[str, None]]:
@@ -187,7 +191,7 @@ class BaseAgent(ABC):
             ]
             output = await cloud_llm_manager(
                 model_name=self.model,
-                provider=CLOUD_PROVIDER,
+                provider=self.CLOUD_PROVIDER,
                 messages=messages,
                 stream=stream,
             )
@@ -216,7 +220,7 @@ class BaseAgent(ABC):
 
         output = await cloud_llm_manager(
             model_name=self.model,
-            provider=CLOUD_PROVIDER,
+            provider=self.CLOUD_PROVIDER,
             messages=messages,
             stream=stream,
         )
