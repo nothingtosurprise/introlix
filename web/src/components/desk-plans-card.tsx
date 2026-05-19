@@ -44,7 +44,7 @@ function StepTextarea({ value, onChange, disabled }: { value: string, onChange: 
             disabled={disabled}
             rows={1}
             className={cn(
-                "w-full bg-transparent border-none p-0 text-sm sm:text-base font-medium leading-relaxed resize-none focus:ring-0 focus:outline-none transition-colors",
+                "w-full bg-transparent border-none p-0 text-sm sm:text-base font-medium leading-relaxed resize-none transition-colors",
                 disabled ? "text-muted-foreground cursor-default" : "text-foreground placeholder:text-muted-foreground/50"
             )}
             placeholder="Enter research topic..."
@@ -257,7 +257,7 @@ const DeskPlanCard = ({ desk_data }: { desk_data: ResearchDesk }) => {
                                                 )}
                                             </div>
 
-                                            <div className="hidden sm:block h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-1"></div>
+                                            <div className="hidden sm:block h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
 
                                             {/* Keywords List */}
                                             <div className="flex flex-wrap gap-2 items-center flex-1 min-w-full sm:min-w-0">
@@ -312,7 +312,7 @@ const DeskPlanCard = ({ desk_data }: { desk_data: ResearchDesk }) => {
                         </div>
                     </CardContent>
 
-                    <CardFooter className="flex-none border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 py-4 sm:py-6 px-4 sm:px-6 flex justify-end rounded-b-xl">
+                    <CardFooter className="flex-none border-t border-slate-100 dark:border-slate-800 py-4 sm:py-6 px-4 sm:px-6 flex justify-end rounded-b-xl">
                         {isConfirmed ? (
                             <div className="flex items-center text-green-600 dark:text-green-500 text-sm font-medium animate-in fade-in slide-in-from-bottom-2">
                                 <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mr-3">

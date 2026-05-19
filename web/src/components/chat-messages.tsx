@@ -58,8 +58,8 @@ export function ChatMessages({
         {isLoading && !streamingMessage && (
           <div className="flex gap-3 px-4 py-6">
             <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-[250px]" />
-              <Skeleton className="h-4 w-[400px]" />
+              <Skeleton className="h-4 w-62.5" />
+              <Skeleton className="h-4 w-100" />
             </div>
           </div>
         )}

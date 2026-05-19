@@ -140,67 +140,59 @@ export default function ResearchDeskDetails() {
     );
   }
 
-  return (
-      <AgentStatus
-        message="Initializing Research Environment"
-        subMessage="Preparing your workspace..."
-        type="setup"
+  // Context agent
+  if (deskState === "context_agent") {
+    return (
+      <ContextAgentPanel
+        workspaceId={workspaceId}
+        deskId={deskId}
+        desk={desk}
+        initialPrompt={initialPrompt || ""}
+        initialModel={initialModel || "auto"}
+        researchScope={normalizedScope}
       />
     );
+  }
 
-  // // Context agent
-  // if (deskState === "context_agent") {
-  //   return (
-  //     <ContextAgentPanel
-  //       workspaceId={workspaceId}
-  //       deskId={deskId}
-  //       desk={desk}
-  //       initialPrompt={initialPrompt || ""}
-  //       initialModel={initialModel || "auto"}
-  //       researchScope={normalizedScope}
-  //     />
-  //   );
-  // }
+  // Planner agent
+  if (deskState === "planner_agent") {
+    return (
+      <AgentStatus
+        message="Formulating Research Strategy"
+        subMessage="Analyzing requirements and generating tasks..."
+        type="planning"
+      />
+    );
+  }
 
-  // // Planner agent
-  // if (deskState === "planner_agent") {
-  //   return (
-  //     <AgentStatus
-  //       message="Formulating Research Strategy"
-  //       subMessage="Analyzing requirements and generating tasks..."
-  //       type="planning"
-  //     />
-  //   );
-  // }
+  // Approve plan
+  if (deskState === "approve_plan") {
+    return (
+      <DeskPlanCard desk_data={desk} />
+    )
+  }
 
-  // // Approve plan
-  // if (deskState === "approve_plan") {
-  //   return (
-  //     <DeskPlanCard desk_data={desk} />
-  //   )
-  // }
-
-  // // Explorer agent
-  // if (deskState === "explorer_agent") {
-  //   return (
-  //     <AgentStatus
-  //       message="Conducting Deep Web Analysis"
-  //       subMessage="Gathering relevant information sources..."
-  //       type="searching"
-  //     />
-  //   );
-  // }
+  // Explorer agent
+  if (deskState === "explorer_agent") {
+    return (
+      <AgentStatus
+        message="Conducting Deep Web Analysis"
+        subMessage="Gathering relevant information sources..."
+        type="searching"
+      />
+    );
+  }
 
   // Everything is ready
-  // return (
-  //   <ResizablePanelGroup orientation="horizontal" className="h-screen w-full overflow-hidden">
-  //     <ResizablePanel defaultSize="75" minSize="50">
-  //       <TextEditor workspaceId={workspaceId} deskId={deskId} />
-  //     </ResizablePanel>
-  //     <ResizableHandle withHandle />
-  //     <ResizablePanel defaultSize="25" minSize="15" maxSize="40">
-  //       <DeskAIPannel workspaceId={workspaceId} deskId={deskId} messages={desk?.messages || []} />
-  //     </ResizablePanel>
-  //   </ResizablePanelGroup>
-  // )
+  return (
+    <ResizablePanelGroup orientation="horizontal" className="h-screen w-full overflow-hidden">
+      <ResizablePanel defaultSize="75" minSize="50">
+        <TextEditor workspaceId={workspaceId} deskId={deskId} />
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize="25" minSize="15" maxSize="40">
+        <DeskAIPannel workspaceId={workspaceId} deskId={deskId} messages={desk?.messages || []} />
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  )
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState, useCallback, KeyboardEvent, useRef, useEffect } from "react";
 import {
   ArrowUp,
+  Book,
   Bot,
   BrainCircuit,
   CheckCircle2,
@@ -15,6 +16,7 @@ import {
   Sparkles,
   Target
 } from "lucide-react";
+import { motion } from "framer-motion";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -164,59 +166,111 @@ export default function ContextAgentPanel({
 
   return (
     <div className="flex h-screen w-full flex-col bg-background text-foreground">
-
       {/* --- Header --- */}
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            <Bot className="h-3.5 w-3.5" />
+      <header className="sticky top-4 z-10 flex items-center justify-between border bg-accent/20 backdrop-blur-lg px-6 py-3 mx-4 mt-4 rounded-full">
+        <motion.div 
+          className="flex items-center gap-3 relative"
+          animate={{ y: [0, -1.5, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <motion.div
+            initial={{ x: 0, scaleX: 1, scaleY: 1, rotate: 0 }}
+            animate={{ 
+              x: [0, 8, -10, 4, 0],
+              scaleX: [1, 1.25, 0.85, 1.05, 1],
+              scaleY: [1, 0.75, 1.15, 0.95, 1],
+              rotate: [0, 6, -6, 2, 0]
+            }}
+            transition={{ 
+              duration: 1.4, 
+              times: [0, 0.5, 0.7, 0.85, 1], 
+              ease: ["easeIn", "easeOut", "easeInOut", "easeInOut"] 
+            }}
+            style={{ transformOrigin: "right center", zIndex: 10 }}
+          >
+            <Bot size={30} className="" />
+          </motion.div>
+          <motion.div 
+            className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
+            initial={{ x: -40, opacity: 0, scaleX: 0.5, scaleY: 0.8 }}
+            animate={{ 
+              x: [-40, -18, 30, -8, 0], 
+              opacity: [0, 1, 1, 1, 1],
+              scaleX: [0.8, 1.4, 0.85, 1.05, 1],
+              scaleY: [0.8, 0.65, 1.15, 0.95, 1]
+            }}
+            transition={{ 
+              duration: 1.4, 
+              times: [0, 0.5, 0.7, 0.85, 1], 
+              ease: ["easeIn", "easeOut", "easeInOut", "easeInOut"] 
+            }}
+            style={{ transformOrigin: "left center", zIndex: 5 }}
+          >
             Context Agent
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight">{deskTitle}</h1>
+          </motion.div>
+        </motion.div>
+        <div className="">
+          <h1 className="text-lg font-bold tracking-tight">{deskTitle}</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end gap-1">
-            <Badge
-              variant={contextAgent?.move_next ? "default" : "outline"}
-              className={cn("transition-colors", contextAgent?.move_next && "bg-green-600 hover:bg-green-700")}
-            >
-              {contextAgent?.move_next ? (
-                <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Ready</span>
-              ) : (
-                <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Gathering Context</span>
-              )}
-            </Badge>
-          </div>
-          <div>
-            <Button title="Retry" onClick={handleRetry} className="cursor-pointer"><RefreshCcw /></Button>
-          </div>
+        <div className="flex items-center gap-3 pr-2">
           {contextAgent?.confidence_level !== undefined && (
-            <div className="hidden flex-col items-end text-xs sm:flex">
-              <span className="text-muted-foreground">Confidence</span>
-              <span className={cn("font-medium",
-                contextAgent.confidence_level > 0.8 ? "text-green-600" : "text-orange-500"
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/30 border border-border/40 backdrop-blur-sm shadow-sm transition-all hover:bg-accent/50">
+              <Target className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Confidence</span>
+              <span className={cn("text-xs font-bold",
+                contextAgent.confidence_level > 0.8 ? "text-emerald-500" : "text-amber-500"
               )}>
                 {(contextAgent.confidence_level * 100).toFixed(0)}%
               </span>
             </div>
           )}
+
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-sm shadow-sm transition-all",
+            contextAgent?.move_next 
+              ? "bg-emerald-500/10 border-emerald-500/20" 
+              : ""
+          )}>
+            {contextAgent?.move_next ? (
+              <>
+                <CheckCircle2 className="h-4 w-4" /> 
+                <span className="text-[11px] font-bold uppercase tracking-wider">Ready</span>
+              </>
+            ) : (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> 
+                <span className="text-[11px] font-bold uppercase tracking-wider">Gathering</span>
+              </>
+            )}
+          </div>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={handleRetry} 
+                  className="rounded-full h-8 w-8 hover:bg-accent hover:text-foreground text-muted-foreground transition-all cursor-pointer"
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                <p>Retry setup</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </header>
 
-      {/* --- Main Scrollable Content --- */}
+      {/* --- Scrollable Content --- */}
       <ScrollArea className="flex-1">
         <main className="mx-auto max-w-4xl space-y-8 px-6 py-8">
 
-          {/* 1. Clarification Section (Primary Focus) */}
+          {/* Clarification Section */}
           <section className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <MessageSquare className="h-4 w-4" />
-              </div>
-              <h2 className="text-lg font-medium">Pending Clarifications</h2>
-            </div>
-
-            <Card className={cn("border-l-4 shadow-sm", questions.length > 0 ? "border-l-amber-500/50" : "border-l-green-500/50")}>
+            <Card className={cn("border-none shadow-sm", questions.length > 0)}>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
                   {questions.length > 0 ? "The agent needs your input" : "All clear for now"}
@@ -231,8 +285,8 @@ export default function ContextAgentPanel({
                 <CardContent>
                   <ul className="space-y-3">
                     {questions.map((q, i) => (
-                      <li key={i} className="flex items-start gap-3 rounded-lg bg-muted/50 p-3 text-sm leading-relaxed">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-background text-xs font-medium text-muted-foreground shadow-sm ring-1 ring-inset ring-border">
+                      <li key={i} className="flex items-center gap-3 rounded-lg bg-muted/50 p-3 text-sm leading-relaxed">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium text-muted-foreground shadow-sm ring-1 ring-inset ring-border">
                           {i + 1}
                         </span>
                         {q}
@@ -246,15 +300,15 @@ export default function ContextAgentPanel({
 
           <Separator />
 
-          {/* 2. Technical Details (Accordion) */}
+          {/* Technical Details (Accordion) */}
           <Accordion type="multiple" className="w-full space-y-4">
 
             {/* Generated Prompt View */}
             {finalPrompt && (
-              <AccordionItem value="prompt" className="border rounded-lg px-4">
+              <AccordionItem value="prompt" className="rounded-lg bg-card px-4">
                 <AccordionTrigger className="hover:no-underline py-4">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <Target className="h-4 w-4 text-muted-foreground" />
+                    <Book className="h-4 w-4 text-muted-foreground" />
                     Current Final Prompt
                   </div>
                 </AccordionTrigger>
@@ -266,43 +320,17 @@ export default function ContextAgentPanel({
                 </AccordionContent>
               </AccordionItem>
             )}
-
-            {/* Research Parameters View */}
-            {researchParameters && (
-              <AccordionItem value="params" className="border rounded-lg px-4">
-                <AccordionTrigger className="hover:no-underline py-4">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Settings2 className="h-4 w-4 text-muted-foreground" />
-                    Extracted Parameters
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-                    {Object.entries(researchParameters).map(([key, value]) => (
-                      <div key={key} className="flex flex-col gap-1 rounded-md border bg-card p-3 shadow-sm">
-                        <span className="text-[10px] font-medium uppercase text-muted-foreground">
-                          {key.replace(/_/g, " ")}
-                        </span>
-                        <span className="text-sm font-medium truncate" title={String(value)}>
-                          {String(value)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )}
           </Accordion>
 
-          <div className="h-24" /> {/* Spacer for fixed footer */}
+          <div className="h-24" />
         </main>
       </ScrollArea>
 
-      {/* --- Footer / Composer --- */}
+      {/* --- Input Area --- */}
       <div className="sticky bottom-0 z-20 w-full bg-background p-4 pt-2">
         <div className="mx-auto max-w-4xl">
           <div className={cn(
-            "relative flex flex-col rounded-xl border bg-background shadow-lg transition-all duration-200 focus-within:ring-1 focus-within:ring-ring focus-within:border-primary",
+            "relative flex flex-col rounded-xl border bg-background shadow-lg transition-all duration-200",
             isComposing && "ring-1 ring-ring border-primary"
           )}>
 
@@ -316,16 +344,16 @@ export default function ContextAgentPanel({
               onCompositionEnd={() => setIsComposing(false)}
               placeholder={questions.length > 0 ? "Answer the questions above or provide more context..." : "How can I help refine the research?"}
               disabled={isPending}
-              className="min-h-[60px] max-h-[200px] w-full resize-none border-0 bg-transparent px-4 py-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:opacity-50"
+              className="min-h-15 max-h-50 w-full resize-none border-0 bg-transparent px-4 py-4 text-sm outline-none placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:opacity-50"
               rows={1}
             />
 
             {/* Toolbar Row */}
-            <div className="flex items-center justify-between border-t bg-muted/20 px-2 py-2">
+            <div className="flex items-center justify-between border-t outline-none bg-muted/20 px-2 py-2">
               <div className="flex items-center gap-2">
                 {/* Model Selector */}
                 <Select value={model} onValueChange={setModel} disabled={isPending}>
-                  <SelectTrigger className="h-8 gap-2 border-0 bg-transparent px-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground focus:ring-0">
+                  <SelectTrigger className="h-8 gap-2 border-0 bg-transparent px-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="start">

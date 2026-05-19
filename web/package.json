@@ -30,6 +30,7 @@
     "@tanstack/react-query": "^5.100.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.39.0",
     "lexical": "^0.44.0",
     "lodash.debounce": "^4.0.8",
     "lucide": "^1.14.0",

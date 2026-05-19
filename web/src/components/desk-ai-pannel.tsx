@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, KeyboardEvent, ChangeEvent } from "react";
-import { ChevronDown, ArrowUp, Upload, Bot, Check, FileText, X, MessageSquare, Edit2 } from "lucide-react";
+import { ChevronDown, ArrowUp, Upload, Bot, Check, FileText, X, MessageSquare, Edit2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useChatDesk, useEditDocument, useDesk } from "@/hooks/use-desk";
 import { Message } from "@/lib/types";
 import { ChatMessages } from "@/components/chat-messages";
+import { Textarea } from "./ui/textarea";
 
 type ModelType = "auto" | "gpt-5" | "claude-sonnet-4" | "deepseek/deepseek-v3.2-exp" | "google/gemini-2.5-pro";
 type ModeType = "ask" | "edit";
@@ -72,12 +73,15 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
   const { mutate: editDocument, isPending: isEditing } = useEditDocument();
   const { data: desk } = useDesk(workspaceId, deskId);
 
-  const handleSubmit = async () => {
-    const trimmed = message.trim();
+  const handleSubmit = async (overrideMessage?: string | React.MouseEvent | React.KeyboardEvent) => {
+    const textToSubmit = typeof overrideMessage === "string" ? overrideMessage : message;
+    const trimmed = textToSubmit.trim();
     if (!trimmed) return;
 
-    // Clear input immediately
-    setMessage("");
+    // Clear input immediately if we aren't overriding, or even if we are
+    if (typeof overrideMessage !== "string") {
+      setMessage("");
+    }
     setSelectedFiles([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
@@ -165,15 +169,28 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
               <Bot className="h-8 w-8" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground/80">
+              <p className="text-sm font-medium text-foreground">
                 {mode === "ask" ? "Research Assistant" : "Editor Assistant"}
               </p>
-              <p className="text-xs max-w-[200px] mx-auto">
+              <p className="text-xs max-w-50 mx-auto">
                 {mode === "ask"
                   ? "Ask questions about your research, sources, or data."
                   : "Describe changes to edit your research document."}
               </p>
             </div>
+            {/* Auto Research Button */}
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full cursor-pointer"
+                onClick={() => handleSubmit("Do auto research and generate an initial outline for this topic.")}
+              >
+                <Sparkles className="h-4 w-4" />
+                Auto Research
+              </Button>
+            </div>
+
           </div>
         </div>
       ) : (
@@ -188,7 +205,7 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
       <div className="p-4 border-t border-border bg-background/50 backdrop-blur-sm">
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden transition-all duration-200 ease-in-out hover:shadow-md">
           <div className="p-4">
-            <textarea
+            <Textarea
               ref={textareaRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -197,7 +214,7 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
               onCompositionEnd={() => setIsComposing(false)}
               placeholder={mode === "ask" ? "Ask a question..." : "Describe changes..."}
               rows={1}
-              className="w-full min-h-[24px] max-h-[300px] resize-none border-0 bg-transparent p-0 text-base focus:outline-none placeholder:text-muted-foreground overflow-y-auto"
+              className="w-full min-h-6 max-h-75 resize-none overflow-y-auto"
             />
           </div>
 
@@ -209,7 +226,7 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
                   className="flex items-center gap-1 text-sm bg-secondary px-2 py-1 rounded-md animate-in fade-in zoom-in duration-200"
                 >
                   <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="truncate max-w-[120px]">{file.name}</span>
+                  <span className="truncate max-w-30">{file.name}</span>
                   <button onClick={() => removeFile(index)} className="ml-1">
                     <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground transition-colors" />
                   </button>
