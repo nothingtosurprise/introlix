@@ -150,6 +150,8 @@ When editing documents, always return the COMPLETE document with all changes app
    - User requests changes to section B
    - Return: Complete document with sections A, B (edited), C, D
 
+5. **No table Used**: Do not return a table or any content that is written for table. If something like 'difference between' needs to written in a table then write in bullet points instead of table.
+
 **In summary**: Think of document editing as creating a new complete version, not a patch or diff. The output should be ready to use as a standalone document with all original content preserved except where explicitly modified.
 """
 
