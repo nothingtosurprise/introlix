@@ -2,6 +2,12 @@ import { Workspace, PaginatedResponse, Chat, CreateChatRequest, SendMessageReque
 
 const BASE_URL = "http://localhost:8000";
 
+type WorkspaceItemDeleteRequest = {
+  workspaceId: string;
+  itemId: string;
+  type: string;
+}
+
 // -------------------- WORKSPACES --------------------
 
 export async function getWorkspaces(page = 1, limit = 10): Promise<PaginatedResponse<Workspace>> {
@@ -32,6 +38,15 @@ export async function getWorkspace(id: string): Promise<Workspace> {
 export async function deleteWorkspace(id: string): Promise<{ message: string }> {
   const res = await fetch(`${BASE_URL}/workspaces/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete workspace");
+  return res.json();
+}
+
+export async function deleteWorkspaceItem(workspaceId: string, itemId: string, type: string): Promise<WorkspaceItemDeleteRequest> {
+  const res = await fetch(`${BASE_URL}/workspaces/${workspaceId}/items/${itemId}?type=${encodeURIComponent(type)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" }
+  });
+  if (!res.ok) throw new Error("Failed to delete workspace item");
   return res.json();
 }
 

@@ -2,8 +2,9 @@
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { deleteWorkspaceItem } from "@/lib/api";
 import { calculateDaysAgo } from "@/lib/utils";
-import { Dot, File, MessageCircle, Microscope, Search } from "lucide-react";
+import { Dot, File, MessageCircle, Microscope, Search, Trash } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -69,6 +70,16 @@ export default function WorkspaceDetailPage() {
         }
     };
 
+    const handleDeleteWorkspace = async (itemId: string, type: string) => {
+        try {
+            await deleteWorkspaceItem(workspaceId, itemId, type);
+            // Remove the deleted item from the list
+            setWorkspaceItems(prev => prev.filter(item => item.id !== itemId));
+        } catch (error) {
+            console.error("Failed to delete workspace:", error);
+        }
+    }
+
     // Intersection Observer for infinite scroll
     useEffect(() => {
         if (!loadMoreRef.current || !hasMore) return;
@@ -133,6 +144,16 @@ export default function WorkspaceDetailPage() {
                                                     <div className="flex text-xs text-muted-foreground items-center">
                                                         <span>Updated {calculateDaysAgo(item.updated_at) == 0 ? "today" : `${calculateDaysAgo(item.updated_at)} days ago`}</span>
                                                     </div>
+                                                </div>
+                                                <div
+                                                    className="z-50"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleDeleteWorkspace(item.id, item.type);
+                                                    }}
+                                                >
+                                                    <Trash className="hover:text-destructive transition-colors" />
                                                 </div>
                                             </CardContent>
                                         </Card>

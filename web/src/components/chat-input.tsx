@@ -42,7 +42,6 @@ export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps
   const [message, setMessage] = useState("");
   const [isComposing, setIsComposing] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("auto");
-  const [selectedAgent, setSelectedAgent] = useState<AgentType>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -81,7 +80,7 @@ export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps
       prompt: trimmed,
       model: selectedModel,
       search: searchEnabled,
-      agent: selectedAgent || "",
+      agent: "",
       files: selectedFiles,
     });
 
@@ -174,51 +173,6 @@ export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps
             >
               <Search className="h-4 w-4" />
             </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="relative cursor-pointer"
-                  disabled={disabled}
-                >
-                  <Bot className="h-4 w-4" />
-                  {selectedAgent && (
-                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary"></span>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuLabel>Agents</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {agents.map((agent) => (
-                  <DropdownMenuItem
-                    key={agent}
-                    onClick={() =>
-                      setSelectedAgent(agent === selectedAgent ? null : agent)
-                    }
-                    className="flex items-center justify-between cursor-pointer"
-                  >
-                    <span>{AGENT_DISPLAY[agent]}</span>
-                    {selectedAgent === agent && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-                {selectedAgent && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setSelectedAgent(null)}
-                      className="text-muted-foreground"
-                    >
-                      Clear Selection
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
 
           <div className="flex items-center gap-2">

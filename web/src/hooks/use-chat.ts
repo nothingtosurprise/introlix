@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { chatApi, getWorkspaces, getWorkspace, createWorkspace, deleteWorkspace, getAllWorkspacesItems, getWorkspaceItems, getModels } from "@/lib/api";
+import { chatApi, getWorkspaces, getWorkspace, createWorkspace, deleteWorkspace, getAllWorkspacesItems, getWorkspaceItems, getModels, deleteWorkspaceItem } from "@/lib/api";
 import { Workspace } from "@/lib/types";
 
 // Models to Display
@@ -71,6 +71,16 @@ export function useDeleteWorkspace() {
   });
 }
 
+export function useDeleteWorkspaceItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workspaceId, itemId, type }: { workspaceId: string; itemId: string; type: string }) =>
+      deleteWorkspaceItem(workspaceId, itemId, type),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workspace-items"] });
+    },
+  });
+}
 
 export function useCreateChat(workspaceId: string) {
   const queryClient = useQueryClient();

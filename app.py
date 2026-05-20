@@ -181,6 +181,30 @@ async def get_workspace_items(
 
     return {"items": items, "total": chat_total + desk_total, "page": page, "limit": limit}
 
+# delete any workspace item (chat, deep research, research desk, etc.)
+@app.delete("/workspaces/{workspace_id}/items/{item_id}", tags=["workspace"])
+async def delete_workspace_item(workspace_id: str, item_id: str, type: str = Query(..., description="Type of the item to delete (chat, desk, etc.)")):
+    object_workspace_id = validate_object_id(workspace_id)
+    object_item_id = validate_object_id(item_id)
+
+    if type == "chat":
+        # Try deleting from chats
+        chat_result = await db.chats.delete_one(
+            {"_id": object_item_id, "workspace_id": str(object_workspace_id)}
+        )
+        if chat_result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        
+    if type == "desk":
+        # Try deleting from research desks
+        desk_result = await db.research_desks.delete_one(
+            {"_id": object_item_id, "workspace_id": str(object_workspace_id)}
+        )
+        if desk_result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+
+    return {"message": f"{type.capitalize()} and related data deleted"}
+        
 
 @app.get("/")
 def read_root():
