@@ -311,8 +311,6 @@ class ChatAgent(BaseAgent):
                 messages=messages, stream=False
             )
 
-            print(f"Raw LLM output (iteration {iteration + 1}): {raw_output}")
-
             try:
                 # Cleaning the raw_output
                 raw_output = raw_output.strip()
@@ -458,15 +456,24 @@ class ChatAgent(BaseAgent):
                 )
 
                 async for chunk in response_stream:
-                    yield json.dumps({"type": "answer_chunk", "content": chunk}) + "\n"
+                    if chunk.strip().startswith('{"type":'):
+                        yield chunk + "\n"
+                    else:
+                        yield json.dumps({"type": "answer_chunk", "content": chunk}) + "\n"
 
                 break
 
 
 async def main():
-    agent = ChatAgent(unique_id="user1", model="gemini-3.1-pro-preview")
+    agent = ChatAgent(unique_id="user1", model="gemini-3.1-flash-lite")
 
-    async for chunk in agent.arun("Hello"):
+    async for chunk in agent.arun("""Alice, Bob, and Carol each live in a different house on the same street: red, green, and blue.
+The person who lives in the red house owns a cat.
+Bob does not live in the green house.
+Carol owns a dog.
+The green house is to the left of the red house.
+Alice does not own a cat.
+Who lives in each house, and what pet do they own?"""):
         print(chunk, end="", flush=True)
 
 

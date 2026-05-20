@@ -29,7 +29,16 @@ import json
 from fastapi import HTTPException
 from llama_cpp import Llama
 from typing import Optional, AsyncGenerator, Union
+from google import genai
+from google.genai import types
 from introlix.config import MODEL_SAVE_DIR, OPEN_ROUTER_KEY, GEMINI_API_KEY
+
+class GeminiResponse:
+    def __init__(self, data: dict):
+        self.data = data
+
+    def json(self) -> dict:
+        return self.data
 
 class LLMState:
     """
@@ -125,35 +134,17 @@ class LLMState:
             model_name: str,
             messages: list,
             stream: bool = False
-    ) -> Union[requests.Response, AsyncGenerator[str, None]]:
+    ) -> Union[GeminiResponse, AsyncGenerator[str, None]]:
         """
-        Get response from Google AI Studio (Gemini) API.
+        Get response from Google AI Studio (Gemini) API using the google-genai library.
 
         This method automatically converts OpenAI-style messages to Gemini's format:
         - Separates system instructions from chat history
         - Converts 'user' and 'assistant' roles to Gemini's 'user' and 'model'
         - Handles both streaming and non-streaming responses
-
-        Args:
-            model_name (str): Gemini model name (e.g., "gemini-2.0-flash-exp").
-            messages (list): List of message dicts with 'role' and 'content' keys.
-            stream (bool): Whether to stream the response. Defaults to False.
-
-        Returns:
-            Union[requests.Response, AsyncGenerator[str, None]]:
-                - Response object if stream=False
-                - AsyncGenerator yielding text chunks if stream=True
-
-        Example:
-            >>> messages = [
-            ...     {"role": "system", "content": "You are a helpful assistant"},
-            ...     {"role": "user", "content": "Hello!"}
-            ... ]
-            >>> response = await llm_state.get_ai_studio("gemini-2.0-flash-exp", messages)
+        - Supports chain-of-thought (thinking process)
         """
-        
-        # Separate System Prompt from Chat History
-        gemini_contents = []
+        contents = []
         system_instruction = None
 
         for msg in messages:
@@ -161,92 +152,71 @@ class LLMState:
             content = msg.get("content")
             
             if role == "system":
-                # As per your curl: "system_instruction": { "parts": [...] }
-                system_instruction = {
-                    "parts": [{"text": content}]
-                }
+                system_instruction = content
             elif role == "user":
-                gemini_contents.append({
-                    "role": "user",
-                    "parts": [{"text": content}]
-                })
-            elif role == "assistant":
-                gemini_contents.append({
-                    "role": "model",
-                    "parts": [{"text": content}]
-                })
+                contents.append(
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=content)]
+                    )
+                )
+            elif role in ["assistant", "model"]:
+                contents.append(
+                    types.Content(
+                        role="model",
+                        parts=[types.Part.from_text(text=content)]
+                    )
+                )
 
-        # Build the request payload for Gemini API
-        payload = {
-            "contents": gemini_contents,
-            # Optional: Safety settings or generation config can be added here
-            # "generationConfig": {"temperature": 0.7}
-        }
-
-        # Add system instruction only if we found one in your messages list
-        if system_instruction:
-            payload["system_instruction"] = system_instruction
-
-        # Prepare headers with API key
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY
-        }
-
-        base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}"
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            thinking_config=types.ThinkingConfig(
+                include_thoughts=True,
+                # thinking_level="medium"
+            )
+        )
 
         if stream:
-            # Streaming endpoint with SSE (Server-Sent Events) for easier parsing
-            url = f"{base_url}:streamGenerateContent?alt=sse"
-            
-            response = requests.post(
-                url=url,
-                headers=headers,
-                data=json.dumps(payload),
-                stream=True
-            )
-            return self._stream_gemini_response(response)
-        else:
-            # Standard endpoint
-            url = f"{base_url}:generateContent"
-            
-            response = requests.post(
-                url=url,
-                headers=headers,
-                data=json.dumps(payload)
-            )
-            return response
-
-    async def _stream_gemini_response(self, response: requests.Response) -> AsyncGenerator[str, None]:
-        """
-        Parse Gemini's Server-Sent Events (SSE) stream format.
-
-        This helper method processes the streaming response from Gemini API,
-        extracting text content from the JSON chunks.
-
-        Args:
-            response (requests.Response): The streaming response object from Gemini API.
-
-        Yields:
-            str: Text chunks from the Gemini response.
-        """
-        for line in response.iter_lines():
-            if line:
-                line = line.decode('utf-8')
-                # Gemini SSE lines start with "data: " just like OpenAI
-                if line.startswith('data: '):
-                    data = line[6:] # Remove 'data: '
-                    try:
-                        chunk = json.loads(data)
-                        # Extract text from Gemini's specific JSON structure
-                        if "candidates" in chunk and len(chunk["candidates"]) > 0:
-                            candidate = chunk["candidates"][0]
-                            if "content" in candidate and "parts" in candidate["content"]:
-                                text = candidate["content"]["parts"][0].get("text", "")
-                                if text:
-                                    yield text
-                    except json.JSONDecodeError:
+            async def _stream_generator():
+                response = await client.aio.models.generate_content_stream(
+                    model=model_name,
+                    contents=contents,
+                    config=config
+                )
+                async for chunk in response:
+                    if not chunk.candidates:
                         continue
+                    candidate = chunk.candidates[0]
+                    if not candidate.content or not candidate.content.parts:
+                        continue
+                    for part in candidate.content.parts:
+                        if not part.text:
+                            continue
+                        if part.thought:
+                            yield json.dumps({"type": "thinking", "content": part.text})
+                        else:
+                            yield json.dumps({"type": "answer_chunk", "content": part.text})
+            return _stream_generator()
+        else:
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config
+            )
+            response_dict = {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": response.text}
+                            ]
+                        }
+                    }
+                ]
+            }
+            return GeminiResponse(response_dict)
 
 
     async def get_open_router(
