@@ -1,16 +1,19 @@
 "use client"
-import { FolderOpen, Moon, Sun } from "lucide-react";
+import { ChevronsUpDown, FolderOpen, HelpCircle, LogOut, Moon, Settings, Sparkles, Sun } from "lucide-react";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "./ui/sidebar";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { useAllWorkspacesItems } from "@/hooks/use-chat";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { Avatar } from "./ui/avatar";
 
 const navigation = [
     { name: "Workspaces", href: "/workspaces", icon: FolderOpen }
 ];
 
 export function AppSidebar() {
+    const { isMobile } = useSidebar();
     const { data: recentOpens } = useAllWorkspacesItems(1, 10);
 
     const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -73,10 +76,74 @@ export function AppSidebar() {
             <SidebarFooter>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton onClick={toggleTheme} className="cursor-pointer w-full my-5 px-5 py-5">
-                            {theme === "light" ? <Moon /> : <Sun />}
-                            {theme === "light" ? "Dark mode" : "Light mode"}
-                        </SidebarMenuButton>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <SidebarMenuButton
+                                    size="lg"
+                                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                                >
+                                    <Avatar className="h-8 w-8 rounded-full">
+                                        <span className="bg-blue-400 w-full items-center justify-center flex">SM</span>
+                                    </Avatar>
+                                    <div className="grid flex-1 text-left text-sm leading-tight">
+                                        <span className="truncate font-medium">{"Satyam Mishra"}</span>
+                                        <span className="truncate text-xs">{"satyam8mishra9@gmail.com"}</span>
+                                    </div>
+                                    <ChevronsUpDown className="ml-auto size-4" />
+                                </SidebarMenuButton>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                className="w-(--radix-dropdown-menu-trigger-width) bg-sidebar border border-accent min-w-56 rounded-lg"
+                                side={isMobile ? "bottom" : "right"}
+                                align="end"
+                                sideOffset={4}
+                            >
+                                <DropdownMenuLabel className="p-0 font-normal">
+                                    <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                                        <Avatar className="h-8 w-8 rounded-lg">
+                                            <span className="bg-blue-400 w-full items-center justify-center flex">SM</span>
+                                        </Avatar>
+                                        <div className="grid flex-1 text-left text-sm leading-tight">
+                                            <span className="truncate font-medium">{"Satyam Mishra"}</span>
+                                            <span className="truncate text-xs">{"satyam8mishra9@gmail.com"}</span>
+                                        </div>
+                                    </div>
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuGroup>
+                                    <Link href={'/upgrade'}>
+                                        <DropdownMenuItem className="cursor-pointer">
+                                            <Sparkles />
+                                            Upgrade plan
+                                        </DropdownMenuItem>
+                                    </Link>
+                                </DropdownMenuGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuGroup>
+                                    <Link href={'/settings'}>
+                                        <DropdownMenuItem className="cursor-pointer">
+                                            <Settings />
+                                            Settings
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <Link href={'/help'}>
+                                        <DropdownMenuItem className="cursor-pointer">
+                                            <HelpCircle />
+                                            Help
+                                        </DropdownMenuItem>
+                                    </Link>
+                                    <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
+                                        {theme === "light" ? <Moon /> : <Sun />}
+                                        {theme === "light" ? "Dark mode" : "Light mode"}
+                                    </DropdownMenuItem>
+                                </DropdownMenuGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem>
+                                    <LogOut />
+                                    Log out
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>

@@ -11,10 +11,16 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SEARCHXNG_HOST = os.environ["SEARCHXNG_HOST"]
 PINECONE_KEY = os.environ["PINECONE_KEY"]
 MONGO_URI = os.environ["MONGO_URI"]
+INTROLIX_API_KEY = os.environ["INTROLIX_API_KEY"]
+JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
 
 # App Info
 APP_NAME = "introlix"
 APP_AUTHOR = "introlix-ai"
+
+# JWT Config
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 # model config
 HF_MODEL_URL = "https://huggingface.co/{username}/{repo_id}/resolve/{branch_name}/{model_name}?download=true"
