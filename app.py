@@ -1,8 +1,10 @@
 from pinecone import Pinecone
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, literal_column, desc, delete
+from introlix.database import async_session_factory, validate_int_id, get_db, init_db
 from introlix.config import PINECONE_KEY
-from fastapi import FastAPI, HTTPException, Query
-from introlix.database import db, serialize_doc, validate_object_id
-from introlix.models import Workspace
+from fastapi import FastAPI, HTTPException, Query, Depends
+from introlix.models import Workspace, WorkspaceModel, WorkspaceChatModel, WorkspaceItemModel, ResearchDeskModel
 from introlix.schemas import PaginatedResponse
 from introlix.routes.chat import chat_router
 from introlix.tools.web_crawler import get_httpx_client, get_browser, shutdown
@@ -14,7 +16,21 @@ from introlix.state import app_state
 from introlix.config import PINECONE_KEY, SUPPORTED_LLMs
 from sentence_transformers import SentenceTransformer
 
-app = FastAPI(title="Introlix", openapi_prefix="/api/v1")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # adding embedding model and pinecone client to app state
+    app_state.embedding_model = SentenceTransformer("all-mpnet-base-v2")
+    app_state.pc = Pinecone(api_key=PINECONE_KEY)
+    await init_db()
+
+    # explorer agent setup
+    await get_httpx_client()
+    await get_browser()
+    yield
+    await shutdown() # Shutdown the HTTPX client and browser when the app stops
+
+app = FastAPI(title="Introlix", openapi_prefix="/api/v1", lifespan=lifespan)
 pc = Pinecone(api_key=PINECONE_KEY)
 
 app.add_middleware(
@@ -25,183 +41,240 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # adding embedding model and pinecone client to app state
-    app_state.embedding_model = SentenceTransformer("all-mpnet-base-v2")
-    app_state.pc = Pinecone(api_key=PINECONE_KEY)
-
-    # explorer agent setup
-    await get_httpx_client()
-    await get_browser()
-    yield
-    await shutdown() # Shutdown the HTTPX client and browser when the app stops
-
 # list of supported LLMs
 @app.get("/llms", tags=["llms"])
 def get_supported_llms():
     return {"items": SUPPORTED_LLMs}
 
 # workspace endpoints
-@app.post("/workspaces", tags=["workspace"])
-async def create_workspace(workspace: Workspace):
-    workspace_dict = workspace.model_dump()
-    result = await db.workspaces.insert_one(workspace_dict)
-    created_workspace = await db.workspaces.find_one({"_id": result.inserted_id})
-    return {
-        "message": "Workspace created",
-        "workspace": serialize_doc(created_workspace),
-    }
+@app.post("/workspaces", response_model=Workspace, tags=["workspace"])
+async def create_workspace(workspace: Workspace, db: AsyncSession = Depends(get_db)):
+    workspace_data = workspace.model_dump(exclude={"id"}, exclude_none=True)
+
+    new_workspace = WorkspaceModel(**workspace_data)
+    db.add(new_workspace)
+    await db.commit()
+    await db.refresh(new_workspace)
+    
+    return Workspace.model_validate(new_workspace)
 
 
 @app.get("/workspaces", response_model=PaginatedResponse, tags=["workspace"])
-async def get_workspaces(page: int = Query(1, ge=1), limit: int = Query(10, ge=1)):
+async def get_workspaces(page: int = Query(1, ge=1), limit: int = Query(10, ge=1), user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
     skip = (page - 1) * limit
-    total = await db.workspaces.count_documents({})
-    cursor = db.workspaces.find().sort("updated_at", DESCENDING).skip(skip).limit(limit)
-    workspaces = [serialize_doc(w) async for w in cursor]
-    return {"items": workspaces, "total": total, "page": page, "limit": limit}
+    query = (
+        select(WorkspaceModel)
+        .where(WorkspaceModel.user_id == user_id)
+        .limit(limit + 1)
+        .offset(skip)
+    )
+    total_result = await db.execute(query)
+    workspaces = total_result.scalars().all()
+    has_next = len(workspaces) > limit
+    if has_next:
+        workspaces = workspaces[:limit]
 
+    return {
+        "items": [Workspace.model_validate(ws).model_dump() for ws in workspaces],
+        "page": page,
+        "limit": limit,
+        "has_next": has_next
+    } 
 
 # Get all items in every workspaces (chats, deep research, research desk, etc.)
 @app.get("/workspaces/items", response_model=PaginatedResponse, tags=["workspace"])
 async def get_all_workspace_items(
-    page: int = Query(1, ge=1), limit: int = Query(10, ge=1)
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1),
+    db: AsyncSession = Depends(get_db)
 ):
-    # get chats related to the workspace
-    chat_total = await db.chats.count_documents({})
-    chats = (
-        db.chats.find(
-            {},
-            {"_id": 1, "workspace_id": 1, "created_at": 1, "title": 1, "updated_at": 1},
-        )
-        .sort("updated_at", DESCENDING)
-        .skip((page - 1) * limit)
-        .limit(limit)
+    offset_value = (page - 1) * limit
+
+    #TODO: Needs to add user check
+    chat_query = select(
+        WorkspaceChatModel.id,
+        WorkspaceChatModel.workspace_id,
+        WorkspaceChatModel.title,
+        WorkspaceChatModel.created_at,
+        WorkspaceChatModel.updated_at,
+        literal_column("'chat'").label("type")
     )
-    chat_list = [serialize_doc(chat) async for chat in chats]
 
-    for chat in chat_list:
-        chat["type"] = "chat"
-
-    # get desks related to the workspace
-    desk_total = await db.research_desks.count_documents({})
-    desks = (
-        db.research_desks.find(
-            {},
-            {"_id": 1, "workspace_id": 1, "created_at": 1, "title": 1, "updated_at": 1},
-        )
-        .sort("updated_at", DESCENDING)
-        .skip((page - 1) * limit)
-        .limit(limit)
+    desk_query = select(
+        ResearchDeskModel.id,
+        ResearchDeskModel.workspace_id,
+        ResearchDeskModel.title,
+        ResearchDeskModel.created_at,
+        ResearchDeskModel.updated_at,
+        literal_column("'desk'").label("type")
     )
-    desk_list = [serialize_doc(desk) async for desk in desks]
 
-    for desk in desk_list:
-        desk["type"] = "desk"
+    combined_query = (
+        chat_query.union_all(desk_query)
+        .order_by(desc(literal_column("updated_at")))
+        .limit(limit + 1)
+        .offset(offset_value)
+    )
 
-    items = desk_list + chat_list
-    items = sorted(items, key=lambda x: x["updated_at"], reverse=True)
+    result = await db.execute(combined_query)
 
-    return {"items": items, "total": chat_total + desk_total, "page": page, "limit": limit}
+    rows = result.all()
+    has_next = len(rows) > limit
+    if has_next:
+        rows = rows[:limit]
 
+    items = [
+        {
+            "id": row.id,
+            "workspace_id": str(row.workspace_id) if row.workspace_id else None,
+            "title": row.title,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+            "type": row.type
+        }
+        for row in rows
+    ]
+
+    return {
+        "items": items,
+        "page": page,
+        "limit": limit,
+        "has_next": has_next
+    }
 
 @app.get("/workspaces/{id}", tags=["workspace"])
-async def get_workspace(id: str):
-    workspace = await db.workspaces.find_one({"_id": validate_object_id(id)})
+async def get_workspace(id: str, db: AsyncSession = Depends(get_db)):
+    query = select(WorkspaceModel).where(WorkspaceModel.id == id)
+    result = await db.execute(query)
+    workspace = result.scalar_one_or_none()
+    
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    return serialize_doc(workspace)
-
+        
+    return {
+        "id": str(workspace.id),
+        "name": workspace.name,
+        "user_id": workspace.user_id,
+        "created_at": workspace.created_at,
+        "updated_at": workspace.updated_at
+    }
 
 @app.delete("/workspaces/{id}", tags=["workspace"])
-async def delete_workspace(id: str):
-    object_id = validate_object_id(id)
-    result = await db.workspaces.delete_one({"_id": object_id})
-    if result.deleted_count == 0:
+async def delete_workspace(id: str, db: AsyncSession = Depends(get_db)):
+    query = select(WorkspaceModel).where(WorkspaceModel.id == id)
+    result = await db.execute(query)
+    workspace = result.scalar_one_or_none()
+    
+    if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    # Delete Search Data
+    # External Cleanup: Delete Search Vector Data (Pinecone)
     try:
         index = pc.Index("explored-data-index")
-        index.delete(namespace="Search", filter={"unique_id": id})
-    except:
-        pass  # No data to delete
+        # Keep using the string representation of your ID for external tracking services
+        index.delete(namespace="Search", filter={"unique_id": str(id)})
+    except Exception:
+        pass  # If vector index cleanup fails or is empty, skip quietly
 
-    # Now delete workspace items
-    # Delete chats
-    await db.chats.delete_many({"workspace_id": str(object_id)})
-    # TODO: Delete other related items like deep research, research desk, etc.
+    await db.delete(workspace)
+    await db.commit()
 
     return {"message": "Workspace and related items deleted"}
 
 
 # Get all items related to a workspace (chats, deep research, research desk, etc.)
-@app.get("/workspaces/{id}/items", response_model=PaginatedResponse, tags=["workspace"])
+@app.get("/workspaces/{id}/items", tags=["workspace"])
 async def get_workspace_items(
-    id: str, page: int = Query(1, ge=1), limit: int = Query(10, ge=1)
+    id: str,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1),
+    db: AsyncSession = Depends(get_db)
 ):
-    object_id = validate_object_id(id)
-    # get chats related to the workspace
-    chat_total = await db.chats.count_documents({"workspace_id": str(object_id)})
-    chats = (
-        db.chats.find(
-            {"workspace_id": str(object_id)},
-            {"_id": 1, "workspace_id": 1, "created_at": 1, "title": 1, "updated_at": 1},
-        )
-        .sort("updated_at", DESCENDING)
-        .skip((page - 1) * limit)
-        .limit(limit)
+    offset_value = (page - 1) * limit
+
+    chat_query = select(
+        WorkspaceChatModel.id,
+        WorkspaceChatModel.workspace_id,
+        WorkspaceChatModel.title,
+        WorkspaceChatModel.created_at,
+        WorkspaceChatModel.updated_at,
+        literal_column("'chat'").label("type")
+    ).where(WorkspaceChatModel.workspace_id == id)
+
+    desk_query = select(
+        ResearchDeskModel.id,
+        ResearchDeskModel.workspace_id,
+        ResearchDeskModel.title,
+        ResearchDeskModel.created_at,
+        ResearchDeskModel.updated_at,
+        literal_column("'desk'").label("type")
+    ).where(ResearchDeskModel.workspace_id == id)
+
+    # Merge records using UNION ALL
+    combined_query = (
+        chat_query.union_all(desk_query)
+        .order_by(desc(literal_column("updated_at")))
+        .limit(limit + 1)
+        .offset(offset_value)
     )
-    chat_list = [serialize_doc(chat) async for chat in chats]
 
-    for chat in chat_list:
-        chat["type"] = "chat"
+    result = await db.execute(combined_query)
+    rows = result.all()
 
-    # get desks related to the workspace
-    desk_total = await db.research_desks.count_documents(
-        {"workspace_id": str(object_id)}
-    )
-    desks = (
-        db.research_desks.find(
-            {"workspace_id": str(object_id)},
-            {"_id": 1, "workspace_id": 1, "created_at": 1, "title": 1, "updated_at": 1},
-        )
-        .sort("updated_at", DESCENDING)
-        .skip((page - 1) * limit)
-        .limit(limit)
-    )
-    desk_list = [serialize_doc(desk) async for desk in desks]
+    has_next = len(rows) > limit
+    if has_next:
+        rows = rows[:limit]
 
-    for desk in desk_list:
-        desk["type"] = "desk"
+    items = [
+        {
+            "id": row.id,
+            "workspace_id": str(row.workspace_id) if row.workspace_id else None,
+            "title": row.title,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+            "type": row.type
+        }
+        for row in rows
+    ]
 
-    items = desk_list + chat_list
-    items = sorted(items, key=lambda x: x["updated_at"], reverse=True)
-
-    return {"items": items, "total": chat_total + desk_total, "page": page, "limit": limit}
+    return {
+        "items": items,
+        "page": page,
+        "limit": limit,
+        "has_next": has_next
+    }
 
 # delete any workspace item (chat, deep research, research desk, etc.)
 @app.delete("/workspaces/{workspace_id}/items/{item_id}", tags=["workspace"])
-async def delete_workspace_item(workspace_id: str, item_id: str, type: str = Query(..., description="Type of the item to delete (chat, desk, etc.)")):
-    object_workspace_id = validate_object_id(workspace_id)
-    object_item_id = validate_object_id(item_id)
-
+async def delete_workspace_item(
+    workspace_id: str,
+    item_id: str, # Keeping this as a string since our chat/desk IDs are UUID strings
+    type: str = Query(..., description="Type of the item to delete (chat, desk, etc.)"),
+    db: AsyncSession = Depends(get_db)
+):
     if type == "chat":
-        # Try deleting from chats
-        chat_result = await db.chats.delete_one(
-            {"_id": object_item_id, "workspace_id": str(object_workspace_id)}
+        target_model = WorkspaceChatModel
+    elif type == "desk":
+        target_model = ResearchDeskModel
+    else:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported item type: '{type}'. Must be 'chat' or 'desk'."
         )
-        if chat_result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Workspace not found")
-        
-    if type == "desk":
-        # Try deleting from research desks
-        desk_result = await db.research_desks.delete_one(
-            {"_id": object_item_id, "workspace_id": str(object_workspace_id)}
-        )
-        if desk_result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Build an atomic delete statement targeting the specific row
+    delete_stmt = (
+        delete(target_model)
+        .where(target_model.id == item_id)
+        .where(target_model.workspace_id == workspace_id)
+    )
+    
+    result = await db.execute(delete_stmt)
+    await db.commit()
+
+    # Check rowcount to verify if an actual database row was altered
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Item not found in this workspace")
 
     return {"message": f"{type.capitalize()} and related data deleted"}
         

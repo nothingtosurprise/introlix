@@ -22,6 +22,9 @@ APP_AUTHOR = "introlix-ai"
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
+# Database config
+DATABASE_URL = "sqlite+aiosqlite:///introlix.db"
+
 # model config
 HF_MODEL_URL = "https://huggingface.co/{username}/{repo_id}/resolve/{branch_name}/{model_name}?download=true"
 MODEL_SAVE_DIR = Path(user_data_dir(appname=APP_NAME, appauthor=APP_AUTHOR)) / "models"

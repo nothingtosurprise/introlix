@@ -33,7 +33,7 @@ export const NewWorkspaceDialog: React.FC<NewWorkspaceDialogProps> = ({
       const newWorkspace = {
         id: null,
         name: workspaceName.trim(),
-        user_id: '', // Will be set by backend
+        user_id: 'usr1', // Will be set by backend
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

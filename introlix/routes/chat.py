@@ -23,19 +23,30 @@ Features:
 
 import json
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-from introlix.models import ChatRequest
+from introlix.database import get_db, async_session_factory
 from introlix.agents.chat_agent import ChatAgent
-from introlix.models import WorkspaceChat, Message
-from introlix.database import db, serialize_doc, validate_object_id
+from introlix.models import (
+    WorkspaceChat,
+    Message,
+    WorkspaceModel,
+    WorkspaceChatModel,
+    ChatRequest,
+)
 from introlix.config import AUTO_MODEL
 from introlix.utils.title_gen import generate_title
 
-chat_router = APIRouter(prefix='/workspace/{workspace_id}/chat', tags=['chat'])
+chat_router = APIRouter(prefix="/workspace/{workspace_id}/chat", tags=["chat"])
 
-@chat_router.post('/new')
-async def create_chat(workspace_id: str, request: WorkspaceChat):
+
+@chat_router.post("/new")
+async def create_chat(
+    workspace_id: str, request: WorkspaceChat, db: AsyncSession = Depends(get_db)
+):
     """
     Create a new chat conversation in a workspace.
 
@@ -60,17 +71,35 @@ async def create_chat(workspace_id: str, request: WorkspaceChat):
         Body: {"title": "My Chat"}
         Response: {"message": "Chat created", "_id": "abc123"}
     """
-    workspace = await db.workspaces.find_one({"_id": validate_object_id(workspace_id)})
+    workspace = await db.execute(
+        select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
+    )
 
-    if not workspace:
+    if not workspace.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Workspace not found")
-    request.workspace_id = workspace_id
-    item_dict = request.model_dump()
-    result = await db.chats.insert_one(item_dict)
-    return {"message": "Chat created", "_id": str(result.inserted_id)}
 
-@chat_router.post('/{chat_id}/')
-async def chat(workspace_id: str, chat_id: str, request: ChatRequest):
+    request.workspace_id = workspace_id
+
+    if len(request.messages) > 0:
+        raise HTTPException(
+            status_code=400, detail="New chat cannot have pre-existing messages"
+        )
+
+    item_dict = request.model_dump(exclude={"title"})
+    result = WorkspaceChatModel(title="New Chat", **item_dict)
+    db.add(result)
+    await db.commit()
+    await db.refresh(result)
+    return {"message": "Chat created", "_id": str(result.id)}
+
+
+@chat_router.post("/{chat_id}/")
+async def chat(
+    workspace_id: str,
+    chat_id: str,
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Send a message to a chat and receive a streaming response.
 
@@ -108,57 +137,65 @@ async def chat(workspace_id: str, chat_id: str, request: ChatRequest):
         Body: {"prompt": "Hello", "model": "auto", "search": false}
         Response: Streaming text response from the AI
     """
-    chat = await db.chats.find_one({"_id": validate_object_id(chat_id)})
+    result = await db.execute(
+        select(WorkspaceChatModel).where(
+            WorkspaceChatModel.id == chat_id,
+            WorkspaceChatModel.workspace_id == workspace_id,
+        )
+    )
+
+    chat = result.scalar_one_or_none()
 
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
-    
-    title = chat.get("title")
 
-    if not title:
+    title = chat.title
+
+    if not title or title == "New Chat":
         # Title is missing, set it
         new_title = await generate_title(request.prompt)
 
-        await db.chats.update_one(
-            {"_id": chat["_id"]},
-            {"$set": {"title": new_title}}
+        await db.execute(
+            update(WorkspaceChatModel)
+            .where(
+                WorkspaceChatModel.id == chat_id,
+                WorkspaceChatModel.workspace_id == workspace_id,
+            )
+            .values(title=new_title)
         )
+        await db.commit()
+        await db.refresh(chat)
 
-        # Update the workspace's updated_at field
-        await db.workspaces.update_one(
-            {"_id": validate_object_id(workspace_id)},
-            {"$set": {"updated_at": datetime.now()}}
-        )
-    
     if request.model == "auto":
         model = AUTO_MODEL
     else:
         model = request.model
 
-    # Load chat history from database
-    messages = chat.get("messages", [])
-
     # Create user message
     user_message = Message(
-        role="user",
-        content=request.prompt,
-        created_at=datetime.now()
+        role="user", content=request.prompt, created_at=datetime.now()
     )
 
     # Add user message to database
-    await db.chats.update_one(
-        {"_id": chat["_id"]},
-        {
-            "$push": {"messages": user_message.model_dump()},
-            "$set": {"updated_at": datetime.now()}
-        }
+    updated_messages = (
+        chat.messages + [user_message.model_dump(mode="json")]
+        if chat.messages
+        else [user_message.model_dump(mode="json")]
     )
+    chat.messages = updated_messages
+    flag_modified(
+        chat, "messages"
+    )  # Inform SQLAlchemy that the messages field has been modified
+
+    await db.commit()
 
     # Initialize chat agent with history
     chat_agent = ChatAgent(
-        unique_id=workspace_id, # This takes workspace_id as data are shared in between workspace
+        unique_id=workspace_id,  # This takes workspace_id as data are shared in between workspace
         model=model,
-        conversation_history=messages
+        conversation_history=updated_messages[
+            :-1
+        ],  # Exclude the current user message from history as it will be passed as prompt
     )
 
     if request.search:
@@ -168,35 +205,52 @@ async def chat(workspace_id: str, chat_id: str, request: ChatRequest):
 
     # Collect assistant response
     assistant_content = ""
+
     async def stream():
         nonlocal assistant_content
         async for chunk in chat_agent.arun(user_prompt):
-            if json.loads(chunk).get("type") == "answer_chunk":
-                assistant_content += json.loads(chunk).get("content", "")
-            else:
+            try:
+                if json.loads(chunk).get("type") == "answer_chunk":
+                    assistant_content += json.loads(chunk).get("content", "")
+                else:
+                    assistant_content += chunk
+            except json.JSONDecodeError:
+                # Treat the chunk as plain text if it's not valid JSON
                 assistant_content += chunk
+
             yield chunk
 
         # After streaming completes, save assistant message
-        assistant_message = Message(
-            role="assistant",
-            content=assistant_content,
-            created_at=datetime.now(),
-            model=model
-        )
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(WorkspaceChatModel).where(
+                    WorkspaceChatModel.id == chat_id,
+                    WorkspaceChatModel.workspace_id == workspace_id,
+                )
+            )
+            new_chat = result.scalar_one_or_none()
 
-        await db.chats.update_one(
-            {"_id": chat["_id"]},
-            {
-                "$push": {"messages": assistant_message.model_dump()},
-                "$set": {"updated_at": datetime.now()}
-            }
-        )
-            
+            if new_chat:
+                assistant_message = Message(
+                    role="assistant",
+                    content=assistant_content,
+                    created_at=datetime.now(),
+                    model=model,
+                )
+
+                new_chat.messages = (
+                    new_chat.messages + [assistant_message.model_dump(mode="json")]
+                    if new_chat.messages
+                    else [assistant_message.model_dump(mode="json")]
+                )
+                flag_modified(new_chat, "messages")
+                await session.commit()
+
     return StreamingResponse(stream(), media_type="text/plain")
 
-@chat_router.get('/{chat_id}/')
-async def get_chat(chat_id: str):
+
+@chat_router.get("/{chat_id}/")
+async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
     """
     Retrieve all messages from a chat conversation.
 
@@ -220,13 +274,17 @@ async def get_chat(chat_id: str):
         GET /workspace/123/chat/abc/
         Response: {"_id": "abc", "title": "My Chat", "messages": [...]}
     """
-    result = await db.chats.find_one({"_id": validate_object_id(chat_id)})
+    query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id)
+    result = await db.execute(query)
+    chat = result.scalar_one_or_none()
 
-    if not result:
+    if not chat:
         return "No Chat Found"
-    return serialize_doc(result)
-@chat_router.delete('/{chat_id}/')
-async def delete_chat(chat_id: str):
+    return WorkspaceChat.model_validate(chat)
+
+
+@chat_router.delete("/{chat_id}/")
+async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
     """
     Delete a chat conversation and its entire history.
 
@@ -247,9 +305,14 @@ async def delete_chat(chat_id: str):
         DELETE /workspace/123/chat/abc/
         Response: {"message": "Chat deleted successfully"}
     """
-    result = await db.chats.delete_one({"_id": validate_object_id(chat_id)})
-    
-    if result.deleted_count == 0:
+    query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id)
+    result = await db.execute(query)
+    chat = result.scalar_one_or_none()
+
+    if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
-    
+
+    await db.delete(chat)
+    await db.commit()
+
     return {"message": "Chat deleted successfully"}

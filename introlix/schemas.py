@@ -2,6 +2,9 @@ from pydantic import BaseModel
 
 class PaginatedResponse(BaseModel):
     items: list
-    total: int
     page: int
     limit: int
+    has_next: bool
+
+    class Config:
+        from_attributes = True

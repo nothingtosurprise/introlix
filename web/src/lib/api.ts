@@ -1,6 +1,6 @@
 import { Workspace, PaginatedResponse, Chat, CreateChatRequest, SendMessageRequest, WorkspaceItem, ResearchDesk, CreateResearchDeskRequest, ResearchDeskContextAgentRequest, ContextAgentStep, ModelListResponse } from "./types";
 
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type WorkspaceItemDeleteRequest = {
   workspaceId: string;
@@ -10,8 +10,8 @@ type WorkspaceItemDeleteRequest = {
 
 // -------------------- WORKSPACES --------------------
 
-export async function getWorkspaces(page = 1, limit = 10): Promise<PaginatedResponse<Workspace>> {
-  const res = await fetch(`${BASE_URL}/workspaces?page=${page}&limit=${limit}`);
+export async function getWorkspaces(page = 1, limit = 10, userId = "usr1"): Promise<PaginatedResponse<Workspace>> {
+  const res = await fetch(`${BASE_URL}/workspaces?page=${page}&limit=${limit}&user_id=${encodeURIComponent(userId)}`);
   return res.json();
 }
 
@@ -72,14 +72,14 @@ export const chatApi = {
     return res.json();
   },
 
-  async getById(chatId: string): Promise<Chat> {
-    const res = await fetch(`${BASE_URL}/workspace/placeholder/chat/${chatId}/`);
+  async getById(workspaceId: string, chatId: string): Promise<Chat> {
+    const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/${chatId}/`);
     if (!res.ok) throw new Error('Chat not found');
     return res.json();
   },
 
-  async delete(chatId: string): Promise<{ message: string }> {
-    const res = await fetch(`${BASE_URL}/workspace/placeholder/chat/${chatId}/`, {
+  async delete(workspaceId: string, chatId: string): Promise<{ message: string }> {
+    const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/${chatId}/`, {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete chat');

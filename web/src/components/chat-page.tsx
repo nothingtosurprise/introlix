@@ -18,7 +18,7 @@ interface ChatPageProps {
 }
 
 export default function ChatPage({ workspaceId, chatId, initialPrompt }: ChatPageProps) {
-    const { data: chat, isLoading: chatLoading, error: chatError } = useChat(chatId);
+    const { data: chat, isLoading: chatLoading, error: chatError } = useChat(workspaceId, chatId);
     const { data: workspace } = useWorkspace(workspaceId);
     const queryClient = useQueryClient();
     const router = useRouter();
@@ -26,11 +26,11 @@ export default function ChatPage({ workspaceId, chatId, initialPrompt }: ChatPag
 
     const { streamingMessage, isStreaming, startStreaming, stopStreaming } = useStreaming({
         onComplete: async () => {
-            await queryClient.invalidateQueries({ queryKey: ["chat", chatId] });
+            await queryClient.invalidateQueries({ queryKey: ["chat", workspaceId, chatId] });
         },
         onError: (error) => {
             console.log(error);
-            queryClient.invalidateQueries({ queryKey: ["chat", chatId] });
+            queryClient.invalidateQueries({ queryKey: ["chat", workspaceId, chatId] });
         },
     });
 
@@ -51,7 +51,7 @@ export default function ChatPage({ workspaceId, chatId, initialPrompt }: ChatPag
                 created_at: new Date().toISOString(),
             };
 
-            queryClient.setQueryData(["chat", chatId], (old: any) => {
+            queryClient.setQueryData(["chat", workspaceId, chatId], (old: any) => {
                 if (!old) return old;
                 return {
                     ...old,

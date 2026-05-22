@@ -10,11 +10,11 @@ export function useModelsList() {
   });
 }
 
-export function useChat(chatId: string | null) {
+export function useChat(workspaceId: string | null, chatId: string | null) {
   return useQuery({
-    queryKey: ["chat", chatId],
-    queryFn: () => chatApi.getById(chatId!),
-    enabled: !!chatId,
+    queryKey: ["chat", workspaceId, chatId],
+    queryFn: () => chatApi.getById(workspaceId!, chatId!),
+    enabled: !!workspaceId && !!chatId,
   });
 }
 
@@ -99,9 +99,9 @@ export function useDeleteChat() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (chatId: string) => chatApi.delete(chatId),
-    onSuccess: (_, chatId) => {
-      queryClient.removeQueries({ queryKey: ["chat", chatId] });
+    mutationFn: ({ workspaceId, chatId }: { workspaceId: string; chatId: string }) => chatApi.delete(workspaceId, chatId),
+    onSuccess: (_, { workspaceId, chatId }) => {
+      queryClient.removeQueries({ queryKey: ["chat", workspaceId, chatId] });
     },
   });
 }
