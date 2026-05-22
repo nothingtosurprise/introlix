@@ -79,7 +79,7 @@ The Research Desk guides you through a comprehensive research process:
 - **Python**: 3.11 or higher
 - **Node.js**: 18 or higher
 - **pnpm**: Package manager for frontend
-- **MongoDB**: Database for storing workspaces and research data
+- **SQLite**: Database for storing workspaces and research data
 - **Pinecone**: Vector database for semantic search
 - **SearXNG**: Self-hosted search engine (see [SearXNG Setup](#searxng-setup))
 
@@ -111,9 +111,6 @@ SEARCHXNG_HOST=http://localhost:8080/search
 
 # Required: Vector database
 PINECONE_KEY=your_pinecone_api_key_here
-
-# Required: Database
-MONGO_URI=mongodb://localhost:27017/introlix
 ```
 
 3. **Install Python dependencies**
@@ -259,7 +256,7 @@ Introlix is built with a modern, scalable architecture:
   - `EditAgent`: AI-assisted document editing
   - `WriterAgent`: Content generation and synthesis
 - **Vector Storage**: Pinecone for semantic search
-- **Database**: MongoDB for data persistence
+- **Database**: SQLite for data persistence
 
 ### Frontend (Next.js/React)
 
@@ -274,7 +271,7 @@ Introlix is built with a modern, scalable architecture:
 - **LLM Providers**: OpenRouter or Google AI Studio
 - **Search**: SearXNG (self-hosted)
 - **Vector DB**: Pinecone
-- **Database**: MongoDB
+- **Database**: SQLite
 
 ---
 
