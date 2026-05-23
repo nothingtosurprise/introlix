@@ -1,6 +1,8 @@
+import { getAuthToken } from "@/app/action";
 import { Workspace, PaginatedResponse, Chat, CreateChatRequest, SendMessageRequest, WorkspaceItem, ResearchDesk, CreateResearchDeskRequest, ResearchDeskContextAgentRequest, ContextAgentStep, ModelListResponse } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_KEY = process.env.NEXT_PUBLIC_INTROLIX_API_KEY;
 
 type WorkspaceItemDeleteRequest = {
   workspaceId: string;
@@ -11,47 +13,101 @@ type WorkspaceItemDeleteRequest = {
 // -------------------- WORKSPACES --------------------
 
 export async function getWorkspaces(page = 1, limit = 10, userId = "usr1"): Promise<PaginatedResponse<Workspace>> {
-  const res = await fetch(`${BASE_URL}/workspaces?page=${page}&limit=${limit}&user_id=${encodeURIComponent(userId)}`);
+  const TOKEN = await getAuthToken();
+  const res = await fetch(`${BASE_URL}/workspaces?page=${page}&limit=${limit}&user_id=${encodeURIComponent(userId)}`, {
+    method: "GET",
+    headers: {
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    },
+  });
+  if (!res.ok) throw new Error("Failed to fetch workspaces");
   return res.json();
 }
 
-export async function createWorkspace(data: Workspace): Promise<{ workspace: Workspace }> {
+export async function createWorkspace(data: Workspace): Promise<{
+  [x: string]: string | null | Workspace; workspace: Workspace
+}> {
+  const TOKEN = await getAuthToken();
   const res = await fetch(`${BASE_URL}/workspaces`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    },
     body: JSON.stringify(data),
   });
-  return res.json();
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Failed to create workspace: ${res.status} ${err}`);
+  }
+
+  const json = await res.json();
+  // Normalize server responses: backend may return the workspace directly or wrapped in { workspace }
+  if (json && json.workspace) return json;
+  return { workspace: json };
 }
 
 export async function getAllWorkspacesItems(page = 1, limit = 10): Promise<PaginatedResponse<WorkspaceItem>> {
-  const res = await fetch(`${BASE_URL}/workspaces/items?page=${page}&limit=${limit}`);
+  const TOKEN = await getAuthToken();
+  const res = await fetch(`${BASE_URL}/workspaces/items?page=${page}&limit=${limit}`, {
+    headers: {
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    }
+  });
   if (!res.ok) throw new Error("Failed to fetch all workspaces items");
   return res.json();
 }
 
 export async function getWorkspace(id: string): Promise<Workspace> {
-  const res = await fetch(`${BASE_URL}/workspaces/${id}`);
+  const TOKEN = await getAuthToken();
+  const res = await fetch(`${BASE_URL}/workspaces/${id}`, {
+    headers: {
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    }
+  });
   return res.json();
 }
 
 export async function deleteWorkspace(id: string): Promise<{ message: string }> {
-  const res = await fetch(`${BASE_URL}/workspaces/${id}`, { method: "DELETE" });
+  const TOKEN = await getAuthToken();
+  const res = await fetch(`${BASE_URL}/workspaces/${id}`, {
+    method: "DELETE",
+    headers: {
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    }
+  });
   if (!res.ok) throw new Error("Failed to delete workspace");
   return res.json();
 }
 
 export async function deleteWorkspaceItem(workspaceId: string, itemId: string, type: string): Promise<WorkspaceItemDeleteRequest> {
+  const TOKEN = await getAuthToken();
   const res = await fetch(`${BASE_URL}/workspaces/${workspaceId}/items/${itemId}?type=${encodeURIComponent(type)}`, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    }
   });
   if (!res.ok) throw new Error("Failed to delete workspace item");
   return res.json();
 }
 
 export async function getWorkspaceItems(workspaceId: string, page = 1, limit = 10): Promise<PaginatedResponse<WorkspaceItem>> {
-  const res = await fetch(`${BASE_URL}/workspaces/${workspaceId}/items?page=${page}&limit=${limit}`);
+  const TOKEN = await getAuthToken();
+  const res = await fetch(`${BASE_URL}/workspaces/${workspaceId}/items?page=${page}&limit=${limit}`, {
+    headers: {
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    }
+  });
   if (!res.ok) throw new Error("Failed to fetch workspace items");
   return res.json();
 }
@@ -63,9 +119,14 @@ export const chatApi = {
     workspaceId: string,
     data: CreateChatRequest
   ): Promise<{ message: string; _id: string }> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/new`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to create chat");
@@ -73,14 +134,25 @@ export const chatApi = {
   },
 
   async getById(workspaceId: string, chatId: string): Promise<Chat> {
-    const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/${chatId}/`);
+    const TOKEN = await getAuthToken();
+    const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/${chatId}/`, {
+      headers: {
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      }
+    });
     if (!res.ok) throw new Error('Chat not found');
     return res.json();
   },
 
   async delete(workspaceId: string, chatId: string): Promise<{ message: string }> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/${chatId}/`, {
       method: 'DELETE',
+      headers: {
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      }
     });
     if (!res.ok) throw new Error('Failed to delete chat');
     return res.json();
@@ -91,9 +163,14 @@ export const chatApi = {
     chatId: string,
     data: SendMessageRequest
   ): AsyncGenerator<string, void, unknown> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/${chatId}/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify(data),
     });
 
@@ -124,9 +201,14 @@ export const chatApi = {
 // -------------------- RESEARCH DESK API --------------------
 export const researchDeskApi = {
   async create(workspaceId: string, data: CreateResearchDeskRequest): Promise<{ message: string; _id: string }> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/new`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify({ data }),
     });
     if (!res.ok) throw new Error("Failed to create research desk");
@@ -135,9 +217,14 @@ export const researchDeskApi = {
 
   // Setup a research desk
   async setup(workspaceId: string, deskId: string, data: { prompt: string, model: string }): Promise<{ message: string }> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/setup`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to setup research desk");
@@ -146,9 +233,14 @@ export const researchDeskApi = {
 
   // Setup a context agent
   async setupContextAgent(workspaceId: string, deskId: string, data: ResearchDeskContextAgentRequest): Promise<ContextAgentStep> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/setup/context-agent`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error("Failed to setup context agent");
@@ -157,10 +249,15 @@ export const researchDeskApi = {
 
   // Setup a planner agent
   async setupPlannerAgent(workspaceId: string, deskId: string, model: string): Promise<{ message: string }> {
+    const TOKEN = await getAuthToken();
     const uri = new URL(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/setup/planner-agent`)
     uri.searchParams.set('model', model)
     const res = await fetch(uri, {
       method: "PATCH",
+      headers: {
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      }
     });
     if (!res.ok) throw new Error("Failed to setup planner agent");
     return res.json();
@@ -168,9 +265,14 @@ export const researchDeskApi = {
 
   // Edit plans created by planner agent
   async editPlans(workspaceId: string, deskId: string, plans: Array<{ topic: string, priority: string, estimated_sources_needed: number, keywords: Array<string> }>): Promise<{ message: string }> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/setup/planner-agent/edit`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify(plans),
     });
     if (!res.ok) {
@@ -182,10 +284,15 @@ export const researchDeskApi = {
 
   // Setup explorer agent
   async setupExplorerAgent(workspaceId: string, deskId: string, model: string): Promise<{ message: string }> {
+    const TOKEN = await getAuthToken();
     const uri = new URL(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/setup/explorer-agent`);
     uri.searchParams.set('model', model)
     const res = await fetch(uri, {
       method: "PATCH",
+      headers: {
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      }
     });
     if (!res.ok) throw new Error("Failed to setup explorer agent");
     return res.json();
@@ -197,9 +304,14 @@ export const researchDeskApi = {
     deskId: string,
     document: object
   ): Promise<{ message: string }> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/docs`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify({ document }),
     });
     if (!res.ok) throw new Error("Failed to add document to research desk");
@@ -212,9 +324,14 @@ export const researchDeskApi = {
     deskId: string,
     data: { prompt: string; model: string }
   ): Promise<{ status: string; message: string }> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/edit-doc`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -230,9 +347,14 @@ export const researchDeskApi = {
     deskId: string,
     data: { prompt: string, model: string }
   ): AsyncGenerator<string, void, unknown> {
+    const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      },
       body: JSON.stringify(data),
     });
 
@@ -273,4 +395,40 @@ export async function getModels(): Promise<ModelListResponse[]> {
   if (!res.ok) throw new Error("Failed to fetch models");
   const data = await res.json();
   return data.items;
+}
+
+// -------------------- Authentication API --------------------
+export async function login(email: string, password: string): Promise<{ message: string; access_token: string; token_type: string }> {
+  const res = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": `${API_KEY}`
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Login failed: ${res.status} ${err}`);
+  }
+  return res.json();
+}
+
+export async function signup(name: string, email: string, password: string): Promise<{ message: string; access_token: string; token_type: string }> {
+  const url = new URL(`${BASE_URL}/auth/signup`);
+  url.searchParams.set('name', name);
+  url.searchParams.set('email', email);
+  url.searchParams.set('password', password);
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "X-API-Key": `${API_KEY}`
+    },
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Signup failed: ${res.status} ${err}`);
+  }
+  return res.json();
 }

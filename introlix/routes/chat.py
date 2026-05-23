@@ -23,6 +23,7 @@ Features:
 
 import json
 from datetime import datetime
+from httpcore import request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -85,7 +86,7 @@ async def create_chat(
             status_code=400, detail="New chat cannot have pre-existing messages"
         )
 
-    item_dict = request.model_dump(exclude={"title"})
+    item_dict = request.model_dump(exclude={"title", "id"})
     result = WorkspaceChatModel(title="New Chat", **item_dict)
     db.add(result)
     await db.commit()

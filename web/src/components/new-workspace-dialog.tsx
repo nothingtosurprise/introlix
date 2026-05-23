@@ -33,7 +33,7 @@ export const NewWorkspaceDialog: React.FC<NewWorkspaceDialogProps> = ({
       const newWorkspace = {
         id: null,
         name: workspaceName.trim(),
-        user_id: 'usr1', // Will be set by backend
+        user_id: null, // Will be set by backend
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -52,8 +52,13 @@ export const NewWorkspaceDialog: React.FC<NewWorkspaceDialogProps> = ({
       // Close dialog
       onOpenChange(false);
       
-      // Navigate to new workspace
-      setTimeout(() => router.push(`/workspaces/${newWorkspaceData.workspace.id}`), 100);
+      // Navigate to new workspace (handle both wrapped and direct responses)
+      const workspaceId = newWorkspaceData?.workspace?.id ?? newWorkspaceData?.id;
+      if (workspaceId) {
+        setTimeout(() => router.push(`/workspaces/${workspaceId}`), 100);
+      } else {
+        console.warn('Unexpected createWorkspace response shape:', newWorkspaceData);
+      }
     } catch (err) {
       console.error('Failed to create workspace:', err);
       setError('Failed to create workspace. Please try again.');

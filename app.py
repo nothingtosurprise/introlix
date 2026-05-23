@@ -1,10 +1,19 @@
 from pinecone import Pinecone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, literal_column, desc, delete
-from introlix.database import async_session_factory, validate_int_id, get_db, init_db
+from introlix.database import get_db, init_db
+from introlix.utils.auth import get_current_user
+from introlix.routes.auth import router as auth_router
 from introlix.config import PINECONE_KEY
 from fastapi import FastAPI, HTTPException, Query, Depends
-from introlix.models import Workspace, WorkspaceModel, WorkspaceChatModel, WorkspaceItemModel, ResearchDeskModel
+from introlix.models import (
+    Workspace,
+    WorkspaceModel,
+    WorkspaceChatModel,
+    WorkspaceItemModel,
+    ResearchDeskModel,
+    UserModel,
+)
 from introlix.schemas import PaginatedResponse
 from introlix.routes.chat import chat_router
 from introlix.tools.web_crawler import get_httpx_client, get_browser, shutdown
@@ -28,7 +37,8 @@ async def lifespan(app: FastAPI):
     await get_httpx_client()
     await get_browser()
     yield
-    await shutdown() # Shutdown the HTTPX client and browser when the app stops
+    await shutdown()  # Shutdown the HTTPX client and browser when the app stops
+
 
 app = FastAPI(title="Introlix", openapi_prefix="/api/v1", lifespan=lifespan)
 pc = Pinecone(api_key=PINECONE_KEY)
@@ -38,29 +48,41 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Content-Type",
+        "X-API-Key",
+        "Authorization",
+    ],
 )
+
 
 # list of supported LLMs
 @app.get("/llms", tags=["llms"])
 def get_supported_llms():
     return {"items": SUPPORTED_LLMs}
 
+
 # workspace endpoints
 @app.post("/workspaces", response_model=Workspace, tags=["workspace"])
-async def create_workspace(workspace: Workspace, db: AsyncSession = Depends(get_db)):
+async def create_workspace(workspace: Workspace, db: AsyncSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+    workspace.user_id = current_user.id  # Ensure the workspace is associated with the current user
     workspace_data = workspace.model_dump(exclude={"id"}, exclude_none=True)
 
     new_workspace = WorkspaceModel(**workspace_data)
     db.add(new_workspace)
     await db.commit()
     await db.refresh(new_workspace)
-    
+
     return Workspace.model_validate(new_workspace)
 
 
 @app.get("/workspaces", response_model=PaginatedResponse, tags=["workspace"])
-async def get_workspaces(page: int = Query(1, ge=1), limit: int = Query(10, ge=1), user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
+async def get_workspaces(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1),
+    user_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
     skip = (page - 1) * limit
     query = (
         select(WorkspaceModel)
@@ -78,40 +100,53 @@ async def get_workspaces(page: int = Query(1, ge=1), limit: int = Query(10, ge=1
         "items": [Workspace.model_validate(ws).model_dump() for ws in workspaces],
         "page": page,
         "limit": limit,
-        "has_next": has_next
-    } 
+        "has_next": has_next,
+    }
+
 
 # Get all items in every workspaces (chats, deep research, research desk, etc.)
 @app.get("/workspaces/items", response_model=PaginatedResponse, tags=["workspace"])
 async def get_all_workspace_items(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1),
-    db: AsyncSession = Depends(get_db)
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     offset_value = (page - 1) * limit
+    user_id = current_user.id
 
-    #TODO: Needs to add user check
-    chat_query = select(
-        WorkspaceChatModel.id,
-        WorkspaceChatModel.workspace_id,
-        WorkspaceChatModel.title,
-        WorkspaceChatModel.created_at,
-        WorkspaceChatModel.updated_at,
-        literal_column("'chat'").label("type")
+    chat_query = (
+        select(
+            WorkspaceChatModel.id,
+            WorkspaceChatModel.workspace_id,
+            WorkspaceChatModel.title,
+            WorkspaceChatModel.created_at,
+            WorkspaceChatModel.updated_at,
+            literal_column("'chat'").label("type"),
+        )
+        .join(WorkspaceModel, WorkspaceModel.id == WorkspaceChatModel.workspace_id)
+        .where(WorkspaceModel.user_id == user_id)
+    )
+    desk_query = (
+        select(
+            ResearchDeskModel.id,
+            ResearchDeskModel.workspace_id,
+            ResearchDeskModel.title,
+            ResearchDeskModel.created_at,
+            ResearchDeskModel.updated_at,
+            literal_column("'desk'").label("type"),
+        )
+        .join(WorkspaceModel, WorkspaceModel.id == ResearchDeskModel.workspace_id)
+        .where(WorkspaceModel.user_id == user_id)
     )
 
-    desk_query = select(
-        ResearchDeskModel.id,
-        ResearchDeskModel.workspace_id,
-        ResearchDeskModel.title,
-        ResearchDeskModel.created_at,
-        ResearchDeskModel.updated_at,
-        literal_column("'desk'").label("type")
-    )
-
+    union_query = chat_query.union_all(desk_query)
+    subquery = union_query.subquery()
     combined_query = (
-        chat_query.union_all(desk_query)
-        .order_by(desc(literal_column("updated_at")))
+        select(subquery)
+        .order_by(
+            desc(subquery.c.updated_at)
+        )  # Target the column inside the subquery explicitly
         .limit(limit + 1)
         .offset(offset_value)
     )
@@ -130,41 +165,38 @@ async def get_all_workspace_items(
             "title": row.title,
             "created_at": row.created_at,
             "updated_at": row.updated_at,
-            "type": row.type
+            "type": row.type,
         }
         for row in rows
     ]
 
-    return {
-        "items": items,
-        "page": page,
-        "limit": limit,
-        "has_next": has_next
-    }
+    return {"items": items, "page": page, "limit": limit, "has_next": has_next}
+
 
 @app.get("/workspaces/{id}", tags=["workspace"])
 async def get_workspace(id: str, db: AsyncSession = Depends(get_db)):
     query = select(WorkspaceModel).where(WorkspaceModel.id == id)
     result = await db.execute(query)
     workspace = result.scalar_one_or_none()
-    
+
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-        
+
     return {
         "id": str(workspace.id),
         "name": workspace.name,
         "user_id": workspace.user_id,
         "created_at": workspace.created_at,
-        "updated_at": workspace.updated_at
+        "updated_at": workspace.updated_at,
     }
+
 
 @app.delete("/workspaces/{id}", tags=["workspace"])
 async def delete_workspace(id: str, db: AsyncSession = Depends(get_db)):
     query = select(WorkspaceModel).where(WorkspaceModel.id == id)
     result = await db.execute(query)
     workspace = result.scalar_one_or_none()
-    
+
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
@@ -188,7 +220,7 @@ async def get_workspace_items(
     id: str,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     offset_value = (page - 1) * limit
 
@@ -198,7 +230,7 @@ async def get_workspace_items(
         WorkspaceChatModel.title,
         WorkspaceChatModel.created_at,
         WorkspaceChatModel.updated_at,
-        literal_column("'chat'").label("type")
+        literal_column("'chat'").label("type"),
     ).where(WorkspaceChatModel.workspace_id == id)
 
     desk_query = select(
@@ -207,7 +239,7 @@ async def get_workspace_items(
         ResearchDeskModel.title,
         ResearchDeskModel.created_at,
         ResearchDeskModel.updated_at,
-        literal_column("'desk'").label("type")
+        literal_column("'desk'").label("type"),
     ).where(ResearchDeskModel.workspace_id == id)
 
     # Merge records using UNION ALL
@@ -232,25 +264,21 @@ async def get_workspace_items(
             "title": row.title,
             "created_at": row.created_at,
             "updated_at": row.updated_at,
-            "type": row.type
+            "type": row.type,
         }
         for row in rows
     ]
 
-    return {
-        "items": items,
-        "page": page,
-        "limit": limit,
-        "has_next": has_next
-    }
+    return {"items": items, "page": page, "limit": limit, "has_next": has_next}
+
 
 # delete any workspace item (chat, deep research, research desk, etc.)
 @app.delete("/workspaces/{workspace_id}/items/{item_id}", tags=["workspace"])
 async def delete_workspace_item(
     workspace_id: str,
-    item_id: str, # Keeping this as a string since our chat/desk IDs are UUID strings
+    item_id: str,  # Keeping this as a string since our chat/desk IDs are UUID strings
     type: str = Query(..., description="Type of the item to delete (chat, desk, etc.)"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     if type == "chat":
         target_model = WorkspaceChatModel
@@ -258,8 +286,8 @@ async def delete_workspace_item(
         target_model = ResearchDeskModel
     else:
         raise HTTPException(
-            status_code=400, 
-            detail=f"Unsupported item type: '{type}'. Must be 'chat' or 'desk'."
+            status_code=400,
+            detail=f"Unsupported item type: '{type}'. Must be 'chat' or 'desk'.",
         )
 
     # Build an atomic delete statement targeting the specific row
@@ -268,7 +296,7 @@ async def delete_workspace_item(
         .where(target_model.id == item_id)
         .where(target_model.workspace_id == workspace_id)
     )
-    
+
     result = await db.execute(delete_stmt)
     await db.commit()
 
@@ -277,7 +305,7 @@ async def delete_workspace_item(
         raise HTTPException(status_code=404, detail="Item not found in this workspace")
 
     return {"message": f"{type.capitalize()} and related data deleted"}
-        
+
 
 @app.get("/")
 def read_root():
@@ -285,6 +313,6 @@ def read_root():
 
 
 # basic routes
-
 app.include_router(chat_router)
 app.include_router(research_desk_router)
+app.include_router(auth_router)

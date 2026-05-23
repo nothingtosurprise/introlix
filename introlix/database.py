@@ -19,7 +19,6 @@ async def init_db():
     """
     Scans metadata and creates tables if they don't exist.
     """
-    from introlix.models import WorkspaceModel, WorkspaceChatModel, WorkspaceItemModel, ResearchDeskModel
     
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

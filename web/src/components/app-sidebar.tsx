@@ -3,10 +3,11 @@ import { ChevronsUpDown, FolderOpen, HelpCircle, LogOut, Moon, Settings, Sparkle
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "./ui/sidebar";
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAllWorkspacesItems } from "@/hooks/use-chat";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Avatar } from "./ui/avatar";
+import { getAuthToken } from "@/app/action";
 
 const navigation = [
     { name: "Workspaces", href: "/workspaces", icon: FolderOpen }
@@ -15,8 +16,28 @@ const navigation = [
 export function AppSidebar() {
     const { isMobile } = useSidebar();
     const { data: recentOpens } = useAllWorkspacesItems(1, 10);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
     const [theme, setTheme] = useState<"light" | "dark">("light");
+
+    useEffect(() => {
+        const checkAuth = async () => {
+            try {
+                const token = await getAuthToken();
+                setIsAuthenticated(!!token);
+            } catch (error) {
+                setIsAuthenticated(false);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        checkAuth();
+    }, []);
+
+    if (isLoading || !isAuthenticated) {
+        return null;
+    }
 
     const toggleTheme = () => {
         const newTheme = theme === "light" ? "dark" : "light";
@@ -24,6 +45,7 @@ export function AppSidebar() {
         document.documentElement.classList.toggle("dark");
     };
 
+ 
     return (
         <Sidebar collapsible="icon">
             <SidebarHeader>

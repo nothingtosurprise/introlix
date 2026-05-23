@@ -6,6 +6,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pydantic import BaseModel, Field
 from introlix.database import Base
 
+# User Table
+class UserModel(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
 # Workspace Table
 class WorkspaceModel(Base):
     __tablename__ = "workspaces"
@@ -17,6 +27,8 @@ class WorkspaceModel(Base):
 
     # Workspace Items relationship
     items: Mapped[List["WorkspaceItemModel"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    chats: Mapped[List["WorkspaceChatModel"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    desks: Mapped[List["ResearchDeskModel"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
 
 # Workspace Item Table
 class WorkspaceItemModel(Base):
@@ -42,6 +54,9 @@ class WorkspaceChatModel(Base):
 
     # Messages
     messages: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    
+    # Relationship back to workspace
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="chats")
 
 
 # Research Desk Table
@@ -62,6 +77,9 @@ class ResearchDeskModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
+    # Relationship back to workspace
+    workspace: Mapped["WorkspaceModel"] = relationship(back_populates="desks")
+
 
 # Chat Agent Response Model
 class ChatResponse(BaseModel):
@@ -78,7 +96,7 @@ class ChatRequest(BaseModel):
 class Workspace(BaseModel):
     id: Optional[str] = None
     name: str
-    user_id: str
+    user_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 

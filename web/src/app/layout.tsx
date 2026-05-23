@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import ReactQueryProvider from "./providers/ReactQueryProvider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,6 +45,7 @@ export default function RootLayout({
                 <SidebarTrigger />
                 <main className="flex-1 flex flex-col items-center justify-center">
                   {children}
+                  <Toaster />
                 </main>
               </div>
             </SidebarProvider>

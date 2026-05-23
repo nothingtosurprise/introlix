@@ -4,7 +4,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Header, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from introlix.database import db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from introlix.database import get_db
+from introlix.models import UserModel
 from introlix.config import JWT_SECRET_KEY as JWT_SECRET, INTROLIX_API_KEY as API_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 security = HTTPBearer(auto_error=False)
@@ -46,7 +49,8 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Ke
 
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    _api_key: str = Depends(verify_api_key)
+    _api_key: str = Depends(verify_api_key),
+    db: AsyncSession = Depends(get_db)
 ) -> dict:
     if not credentials or not credentials.credentials:
         raise HTTPException(
@@ -55,14 +59,17 @@ async def get_current_user(
         )
     
     token = credentials.credentials
+    
     payload = decode_access_token(token)
-    if not payload or "email" not in payload:
+    if not payload or "sub" not in payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials / Token expired"
         )
     
-    user = await db.users.find_one({"email": payload["email"]})
+    query = select(UserModel).where(UserModel.id == payload["sub"])
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
