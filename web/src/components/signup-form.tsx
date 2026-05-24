@@ -26,9 +26,8 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const signup = useSignup();
 
-  const handleSubmit = (e: React.ChangeEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.ChangeEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Handle form submission logic here
 
     if (password !== confirmPassword) {
       toast.error("Passwords do not match");
@@ -40,17 +39,13 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       return;
     }
 
-    // Call your signup API here with name, email, and password
-    signup.mutate({ name, email, password });
-
-    if (signup.isError) {
-      const errorMessage = (signup.error as any)?.message || "Signup failed. Please try again.";
+    try {
+      const data = await signup.mutateAsync({ name, email, password });
+      toast.success(data?.message || "Signup successful! Welcome!");
+    } catch (error) {
+      const errorMessage = (error as any)?.message || "Signup failed. Please try again.";
       toast.error(errorMessage);
-    } else if (signup.isSuccess) {
-      const successMessage = (signup.data as any)?.message || "Signup successful! Please log in.";
-      toast.success(successMessage);
     }
-
   }
   return (
     <Card {...props}>
@@ -93,7 +88,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
             </Field>
             <FieldGroup>
               <Field>
-                <Button className="cursor-pointer" onClick={() => handleSubmit} type="submit">Create Account</Button>
+                <Button className="cursor-pointer" type="submit">Create Account</Button>
                 <FieldDescription className="px-6 text-center">
                   Already have an account? <Link href="/login">Sign in</Link>
                 </FieldDescription>

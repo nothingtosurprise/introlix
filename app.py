@@ -10,7 +10,6 @@ from introlix.models import (
     Workspace,
     WorkspaceModel,
     WorkspaceChatModel,
-    WorkspaceItemModel,
     ResearchDeskModel,
     UserModel,
 )
@@ -64,9 +63,15 @@ def get_supported_llms():
 
 # workspace endpoints
 @app.post("/workspaces", response_model=Workspace, tags=["workspace"])
-async def create_workspace(workspace: Workspace, db: AsyncSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
-    workspace.user_id = current_user.id  # Ensure the workspace is associated with the current user
-    workspace_data = workspace.model_dump(exclude={"id"}, exclude_none=True)
+async def create_workspace(
+    workspace: Workspace,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    workspace.user_id = (
+        current_user.id
+    )  # Ensure the workspace is associated with the current user
+    workspace_data = workspace.model_dump(exclude={"id", "created_at", "updated_at"}, exclude_none=True)
 
     new_workspace = WorkspaceModel(**workspace_data)
     db.add(new_workspace)
@@ -80,13 +85,13 @@ async def create_workspace(workspace: Workspace, db: AsyncSession = Depends(get_
 async def get_workspaces(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1),
-    user_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     skip = (page - 1) * limit
     query = (
         select(WorkspaceModel)
-        .where(WorkspaceModel.user_id == user_id)
+        .where(WorkspaceModel.user_id == current_user.id)
         .limit(limit + 1)
         .offset(skip)
     )
@@ -174,13 +179,20 @@ async def get_all_workspace_items(
 
 
 @app.get("/workspaces/{id}", tags=["workspace"])
-async def get_workspace(id: str, db: AsyncSession = Depends(get_db)):
+async def get_workspace(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     query = select(WorkspaceModel).where(WorkspaceModel.id == id)
     result = await db.execute(query)
     workspace = result.scalar_one_or_none()
 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     return {
         "id": str(workspace.id),
@@ -192,13 +204,20 @@ async def get_workspace(id: str, db: AsyncSession = Depends(get_db)):
 
 
 @app.delete("/workspaces/{id}", tags=["workspace"])
-async def delete_workspace(id: str, db: AsyncSession = Depends(get_db)):
+async def delete_workspace(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     query = select(WorkspaceModel).where(WorkspaceModel.id == id)
     result = await db.execute(query)
     workspace = result.scalar_one_or_none()
 
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # External Cleanup: Delete Search Vector Data (Pinecone)
     try:
@@ -221,31 +240,43 @@ async def get_workspace_items(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1),
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     offset_value = (page - 1) * limit
 
-    chat_query = select(
-        WorkspaceChatModel.id,
-        WorkspaceChatModel.workspace_id,
-        WorkspaceChatModel.title,
-        WorkspaceChatModel.created_at,
-        WorkspaceChatModel.updated_at,
-        literal_column("'chat'").label("type"),
-    ).where(WorkspaceChatModel.workspace_id == id)
-
-    desk_query = select(
-        ResearchDeskModel.id,
-        ResearchDeskModel.workspace_id,
-        ResearchDeskModel.title,
-        ResearchDeskModel.created_at,
-        ResearchDeskModel.updated_at,
-        literal_column("'desk'").label("type"),
-    ).where(ResearchDeskModel.workspace_id == id)
+    chat_query = (
+        select(
+            WorkspaceChatModel.id,
+            WorkspaceChatModel.workspace_id,
+            WorkspaceChatModel.title,
+            WorkspaceChatModel.created_at,
+            WorkspaceChatModel.updated_at,
+            literal_column("'chat'").label("type"),
+        )
+        .join(WorkspaceModel, WorkspaceModel.id == WorkspaceChatModel.workspace_id)
+        .where(WorkspaceModel.id == id)
+        .where(WorkspaceModel.user_id == current_user.id)
+    )
+    desk_query = (
+        select(
+            ResearchDeskModel.id,
+            ResearchDeskModel.workspace_id,
+            ResearchDeskModel.title,
+            ResearchDeskModel.created_at,
+            ResearchDeskModel.updated_at,
+            literal_column("'desk'").label("type"),
+        )
+        .join(WorkspaceModel, WorkspaceModel.id == ResearchDeskModel.workspace_id)
+        .where(WorkspaceModel.id == id)
+        .where(WorkspaceModel.user_id == current_user.id)
+    )
 
     # Merge records using UNION ALL
+    union_query = chat_query.union_all(desk_query)
+    subquery = union_query.subquery()
     combined_query = (
-        chat_query.union_all(desk_query)
-        .order_by(desc(literal_column("updated_at")))
+        select(subquery)
+        .order_by(desc(subquery.c.updated_at))
         .limit(limit + 1)
         .offset(offset_value)
     )
@@ -279,6 +310,7 @@ async def delete_workspace_item(
     item_id: str,  # Keeping this as a string since our chat/desk IDs are UUID strings
     type: str = Query(..., description="Type of the item to delete (chat, desk, etc.)"),
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     if type == "chat":
         target_model = WorkspaceChatModel
@@ -295,6 +327,9 @@ async def delete_workspace_item(
         delete(target_model)
         .where(target_model.id == item_id)
         .where(target_model.workspace_id == workspace_id)
+        .where(
+            target_model.workspace.has(WorkspaceModel.user_id == current_user.id)
+        )
     )
 
     result = await db.execute(delete_stmt)

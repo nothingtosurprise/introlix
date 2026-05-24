@@ -7,7 +7,8 @@ import { useState, useEffect } from "react";
 import { useAllWorkspacesItems } from "@/hooks/use-chat";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Avatar } from "./ui/avatar";
-import { getAuthToken } from "@/app/action";
+import { clearAuthToken, getAuthToken, getUserInfo } from "@/app/action";
+import { useRouter } from "next/navigation";
 
 const navigation = [
     { name: "Workspaces", href: "/workspaces", icon: FolderOpen }
@@ -18,14 +19,25 @@ export function AppSidebar() {
     const { data: recentOpens } = useAllWorkspacesItems(1, 10);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-
     const [theme, setTheme] = useState<"light" | "dark">("light");
+
+    const router = useRouter();
+
+    // User Info
+    const [userInfo, setUserInfo] = useState<{ name: string; email: string } | null>(null);
+
 
     useEffect(() => {
         const checkAuth = async () => {
             try {
                 const token = await getAuthToken();
                 setIsAuthenticated(!!token);
+
+                // save user info
+                if (token) {
+                    const user_info = await getUserInfo();
+                    setUserInfo(user_info);
+                }
             } catch (error) {
                 setIsAuthenticated(false);
             } finally {
@@ -45,7 +57,7 @@ export function AppSidebar() {
         document.documentElement.classList.toggle("dark");
     };
 
- 
+
     return (
         <Sidebar collapsible="icon">
             <SidebarHeader>
@@ -105,11 +117,11 @@ export function AppSidebar() {
                                     className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                                 >
                                     <Avatar className="h-8 w-8 rounded-full">
-                                        <span className="bg-blue-400 w-full items-center justify-center flex">SM</span>
+                                        <span className="bg-blue-400 w-full items-center justify-center flex">{userInfo?.name?.split(' ')[0].charAt(0)}{userInfo?.name?.split(' ')[1].charAt(0)}</span>
                                     </Avatar>
                                     <div className="grid flex-1 text-left text-sm leading-tight">
-                                        <span className="truncate font-medium">{"Satyam Mishra"}</span>
-                                        <span className="truncate text-xs">{"satyam8mishra9@gmail.com"}</span>
+                                        <span className="truncate font-medium">{userInfo?.name}</span>
+                                        <span className="truncate text-xs">{userInfo?.email}</span>
                                     </div>
                                     <ChevronsUpDown className="ml-auto size-4" />
                                 </SidebarMenuButton>
@@ -123,23 +135,14 @@ export function AppSidebar() {
                                 <DropdownMenuLabel className="p-0 font-normal">
                                     <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                                         <Avatar className="h-8 w-8 rounded-lg">
-                                            <span className="bg-blue-400 w-full items-center justify-center flex">SM</span>
+                                            <span className="bg-blue-400 w-full items-center justify-center flex">{userInfo?.name?.split(' ')[0].charAt(0)}{userInfo?.name?.split(' ')[1].charAt(0)}</span>
                                         </Avatar>
                                         <div className="grid flex-1 text-left text-sm leading-tight">
-                                            <span className="truncate font-medium">{"Satyam Mishra"}</span>
-                                            <span className="truncate text-xs">{"satyam8mishra9@gmail.com"}</span>
+                                            <span className="truncate font-medium">{userInfo?.name}</span>
+                                            <span className="truncate text-xs">{userInfo?.email}</span>
                                         </div>
                                     </div>
                                 </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuGroup>
-                                    <Link href={'/upgrade'}>
-                                        <DropdownMenuItem className="cursor-pointer">
-                                            <Sparkles />
-                                            Upgrade plan
-                                        </DropdownMenuItem>
-                                    </Link>
-                                </DropdownMenuGroup>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuGroup>
                                     <Link href={'/settings'}>
@@ -160,7 +163,10 @@ export function AppSidebar() {
                                     </DropdownMenuItem>
                                 </DropdownMenuGroup>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                    clearAuthToken();
+                                    router.push("/login");
+                                }} className="cursor-pointer">
                                     <LogOut />
                                     Log out
                                 </DropdownMenuItem>

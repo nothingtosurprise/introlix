@@ -45,7 +45,7 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from fastapi.responses import StreamingResponse
 from httpcore import request
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from introlix.models import (
@@ -55,10 +55,12 @@ from introlix.models import (
     EditDocRequest,
     Message,
     WorkspaceModel,
-    ResearchDeskModel
+    ResearchDeskModel,
+    UserModel
 )
 from introlix.schemas import PaginatedResponse
 from introlix.utils.title_gen import generate_title
+from introlix.utils.auth import get_current_user
 from introlix.database import get_db, async_session_factory
 from introlix.agents.context_agent import ContextAgent, ContextOutput, AgentInput
 from introlix.agents.planner_agent import PlannerAgent
@@ -76,7 +78,7 @@ research_desk_router = APIRouter(
 explorer_agent = ExplorerAgent()
 
 @research_desk_router.post("/new")
-async def create_research_desk(workspace_id: str, request: ResearchDesk, db: AsyncSession = Depends(get_db)):
+async def create_research_desk(workspace_id: str, request: ResearchDesk, db: AsyncSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     """
     Creating a new research desk.
 
@@ -91,19 +93,22 @@ async def create_research_desk(workspace_id: str, request: ResearchDesk, db: Asy
     Raises:
         HTTPException: 404 if Workspace not found
     """
-    workspace = await db.execute(
+    workspace_result = await db.execute(
         select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
     )
 
-    if not workspace.scalar_one_or_none():
+    workspace = workspace_result.scalar_one_or_none()
+    if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-        
+
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to create research desk in this workspace")
+
     request.workspace_id = workspace_id
     request.state = "initial"
-    item_dict = request.model_dump(exclude={"workspace_id"})
+    item_dict = request.model_dump(exclude={"workspace_id", "created_at", "updated_at"})
     result = ResearchDeskModel(
         workspace_id=workspace_id,
-        state="initial",
         **item_dict
     )
     
@@ -116,7 +121,7 @@ async def create_research_desk(workspace_id: str, request: ResearchDesk, db: Asy
 
 @research_desk_router.patch("/{desk_id}/setup")
 async def setup_research_desk(
-    workspace_id: str, desk_id: str, request: ResearchDeskRequest, db: AsyncSession = Depends(get_db)
+    workspace_id: str, desk_id: str, request: ResearchDeskRequest, db: AsyncSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)
 ):
     """
     Preparing a already existing research desk by adding a new title based on the prompt.
@@ -146,7 +151,7 @@ async def setup_research_desk(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     desk_obj = desk_result.scalar_one_or_none()
 
@@ -183,7 +188,8 @@ async def setup_research_desk_context_agent(
     workspace_id: str, 
     desk_id: str, 
     request: ResearchDeskContextAgentRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Enhance user prompt using context agent before setting up research desk.
@@ -216,7 +222,7 @@ async def setup_research_desk_context_agent(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     research_desk = desk_result.scalar_one_or_none()
     if not research_desk:
@@ -311,7 +317,8 @@ async def setup_research_desk_planner_agent(
     workspace_id: str, 
     desk_id: str, 
     model: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Creating a dedicated plan for the research.
@@ -343,7 +350,7 @@ async def setup_research_desk_planner_agent(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     research_desk = desk_result.scalar_one_or_none()
     if not research_desk:
@@ -407,7 +414,8 @@ async def edit_research_desk_planner_agent(
     workspace_id: str, 
     desk_id: str,
     topics: List[Dict[str, Any]] = Body(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Edits the plan generated by planner agent.
@@ -439,7 +447,7 @@ async def edit_research_desk_planner_agent(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     research_desk = desk_result.scalar_one_or_none()
     if not research_desk:
@@ -493,7 +501,8 @@ async def setup_research_desk_explorer_agent(
     workspace_id: str, 
     desk_id: str, 
     model: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Getting data from internet based on the keywords.
@@ -524,7 +533,7 @@ async def setup_research_desk_explorer_agent(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     research_desk = desk_result.scalar_one_or_none()
     if not research_desk:
@@ -572,7 +581,8 @@ async def add_documents(
     workspace_id: str, 
     desk_id: str, 
     documents: dict,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Adding documents to the research desk.
@@ -593,7 +603,7 @@ async def add_documents(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     desk = desk_result.scalar_one_or_none()
     if not desk:
@@ -614,7 +624,8 @@ async def edit_document(
     workspace_id: str, 
     desk_id: str, 
     request: EditDocRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Edit a document using an AI agent.
@@ -638,7 +649,7 @@ async def edit_document(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     research_desk = desk_result.scalar_one_or_none()
     if not research_desk:
@@ -716,7 +727,8 @@ async def edit_document(
 async def chat(
     workspace_id: str, 
     desk_id: str, 
-    request: ResearchDeskRequest
+    request: ResearchDeskRequest,
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Chat with AI about the research desk content.
@@ -734,7 +746,7 @@ async def chat(
             select(ResearchDeskModel).where(
                 ResearchDeskModel.id == desk_id,
                 ResearchDeskModel.workspace_id == workspace_id
-            )
+            ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
         )
         research_desk = desk_result.scalar_one_or_none()
         if not research_desk:
@@ -815,7 +827,8 @@ async def get_desks(
     workspace_id: str, 
     page: int = Query(1, ge=1), 
     limit: int = Query(10, ge=1),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     For getting list of research desks that exist in a workspace.
@@ -837,6 +850,7 @@ async def get_desks(
             ResearchDeskModel.updated_at
         )
         .where(ResearchDeskModel.workspace_id == workspace_id)
+        .where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
         .order_by(desc(ResearchDeskModel.updated_at))
         .offset((page - 1) * limit)
         .limit(limit)
@@ -862,7 +876,8 @@ async def get_desks(
 async def get_desk(
     workspace_id: str, 
     desk_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     For getting a specific research desk by its ID.
@@ -878,7 +893,7 @@ async def get_desk(
         select(ResearchDeskModel).where(
             ResearchDeskModel.id == desk_id,
             ResearchDeskModel.workspace_id == workspace_id
-        )
+        ).where(ResearchDeskModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     )
     desk = desk_result.scalar_one_or_none()
 

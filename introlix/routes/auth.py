@@ -31,7 +31,9 @@ async def signup(name: str, email: str, password: str, db: AsyncSession = Depend
     return {
         "message": "User created successfully",
         "access_token": create_access_token(data={"sub": new_user.id}),
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "name": new_user.name,
+        "email": new_user.email
     }
 
 
@@ -55,5 +57,7 @@ async def login(email: str, password: str, db: AsyncSession = Depends(get_db)):
     return {
         "message": "Login successful",
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "name": user.name,
+        "email": user.email
     }

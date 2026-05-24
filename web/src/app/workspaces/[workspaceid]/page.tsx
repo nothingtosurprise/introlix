@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { deleteWorkspaceItem } from "@/lib/api";
+import { deleteWorkspaceItem, getWorkspaceItems } from "@/lib/api";
 import { calculateDaysAgo } from "@/lib/utils";
 import { Dot, File, MessageCircle, Microscope, Search, Trash } from "lucide-react";
 import Link from "next/link";
@@ -10,15 +10,6 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const MAX_RENDERED_ITEMS = 50;
-
-async function getWorkspaceItems(workspaceId: string, page: number, limit: number) {
-    const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const res = await fetch(`${BASE_URL}/workspaces/${workspaceId}/items?page=${page}&limit=${limit}`);
-    if (!res.ok) {
-        throw new Error('Failed to fetch workspace items');
-    }
-    return res.json();
-}
 
 export default function WorkspaceDetailPage() {
     const [workspaceItems, setWorkspaceItems] = useState<any[]>([]);

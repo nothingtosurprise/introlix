@@ -12,9 +12,9 @@ type WorkspaceItemDeleteRequest = {
 
 // -------------------- WORKSPACES --------------------
 
-export async function getWorkspaces(page = 1, limit = 10, userId = "usr1"): Promise<PaginatedResponse<Workspace>> {
+export async function getWorkspaces(page = 1, limit = 10): Promise<PaginatedResponse<Workspace>> {
   const TOKEN = await getAuthToken();
-  const res = await fetch(`${BASE_URL}/workspaces?page=${page}&limit=${limit}&user_id=${encodeURIComponent(userId)}`, {
+  const res = await fetch(`${BASE_URL}/workspaces?page=${page}&limit=${limit}`, {
     method: "GET",
     headers: {
       "X-API-Key": `${API_KEY}`,
@@ -161,7 +161,8 @@ export const chatApi = {
   async *sendMessage(
     workspaceId: string,
     chatId: string,
-    data: SendMessageRequest
+    data: SendMessageRequest,
+    signal?: AbortSignal
   ): AsyncGenerator<string, void, unknown> {
     const TOKEN = await getAuthToken();
     const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/chat/${chatId}/`, {
@@ -172,6 +173,7 @@ export const chatApi = {
         "Authorization": `Bearer ${TOKEN}`
       },
       body: JSON.stringify(data),
+      signal,
     });
 
     if (!res.ok) {
@@ -383,8 +385,18 @@ export const researchDeskApi = {
 
   // Get a research desk by id
   async getById(workspaceId: string, deskId: string): Promise<ResearchDesk> {
-    const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}`);
-    if (!res.ok) throw new Error('Research Desk not found');
+    const TOKEN = await getAuthToken();
+    const res = await fetch(`${BASE_URL}/workspace/${workspaceId}/research-desk/${deskId}`, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": `${API_KEY}`,
+        "Authorization": `Bearer ${TOKEN}`
+      }
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Failed to fetch research desk: ${res.status} ${err}`);
+    }
     return res.json();
   }
 }
@@ -395,40 +407,4 @@ export async function getModels(): Promise<ModelListResponse[]> {
   if (!res.ok) throw new Error("Failed to fetch models");
   const data = await res.json();
   return data.items;
-}
-
-// -------------------- Authentication API --------------------
-export async function login(email: string, password: string): Promise<{ message: string; access_token: string; token_type: string }> {
-  const res = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": `${API_KEY}`
-    },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Login failed: ${res.status} ${err}`);
-  }
-  return res.json();
-}
-
-export async function signup(name: string, email: string, password: string): Promise<{ message: string; access_token: string; token_type: string }> {
-  const url = new URL(`${BASE_URL}/auth/signup`);
-  url.searchParams.set('name', name);
-  url.searchParams.set('email', email);
-  url.searchParams.set('password', password);
-
-  const res = await fetch(url.toString(), {
-    method: "POST",
-    headers: {
-      "X-API-Key": `${API_KEY}`
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Signup failed: ${res.status} ${err}`);
-  }
-  return res.json();
 }

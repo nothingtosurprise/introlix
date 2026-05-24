@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 import uuid
 from sqlalchemy import String, DateTime, JSON, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from introlix.database import Base
 
 # User Table
@@ -100,6 +100,11 @@ class Workspace(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
+    @field_serializer('created_at', 'updated_at')
+    def serialize_timestamps(self, value: datetime) -> str:
+        """Convert datetime to ISO format string for JSON serialization"""
+        return value.isoformat() if isinstance(value, datetime) else value
+
     class Config:
         from_attributes = True
 
@@ -122,6 +127,10 @@ class Message(BaseModel):
     tokens: Optional[int] = None  # Token count for this message
     model: Optional[str] = None  # Model used (for assistant messages)
 
+    @field_serializer('created_at')
+    def serialize_created_at(self, value: datetime) -> str:
+        """Convert datetime to ISO format string for JSON serialization"""
+        return value.isoformat() if isinstance(value, datetime) else value
 
     class Config:
         from_attributes = True
@@ -133,6 +142,11 @@ class WorkspaceChat(BaseModel):
     messages: List[Message] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+    @field_serializer('created_at', 'updated_at')
+    def serialize_timestamps(self, value: datetime) -> str:
+        """Convert datetime to ISO format string for JSON serialization"""
+        return value.isoformat() if isinstance(value, datetime) else value
 
     class Config:
         from_attributes = True

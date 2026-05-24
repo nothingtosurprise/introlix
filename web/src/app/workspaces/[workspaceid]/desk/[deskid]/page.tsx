@@ -57,8 +57,10 @@ export default function ResearchDeskDetails() {
 
   // Setup desk
   useEffect(() => {
-    if (deskState !== "initial") return;
+    if (isLoading || !desk) return;
+    if (desk.state !== "initial") return;
     if (setupDesk.isPending || setupDesk.isSuccess) return;
+    if (!initialPrompt) return;
 
     setupDesk.mutate({
       data: {
@@ -66,7 +68,7 @@ export default function ResearchDeskDetails() {
         model: initialModel || "auto",
       },
     });
-  }, [deskState, initialPrompt, initialModel, setupDesk]);
+  }, [desk, isLoading, initialPrompt, initialModel, setupDesk]);
 
   // Setup context agent
   useEffect(() => {

@@ -1,33 +1,39 @@
 'use client';
 
-import { login, signup } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { setAuthToken } from "@/app/action";
+import { useRouter } from "next/navigation";
+import { loginAction, signupAction } from "@/app/actions/auth";
 
 export function useLogin() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (items: { email: string; password: string }) => login(items.email, items.password),
-        onSuccess: async (data) => {
-            await setAuthToken(data.access_token);
-            queryClient.invalidateQueries({ queryKey: ["currentUser"] });
-        },
-        onError: (error) => {
-            console.error("Login failed:", error);
-        }
-    });
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  return useMutation({
+    mutationFn: (items: { email: string; password: string }) => loginAction(items.email, items.password),
+    onSuccess: async (data) => {
+      // cookies are set in the server action (next/headers)
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] });
+      router.push("/");
+    },
+    onError: (error) => {
+      console.error("Login failed:", error);
+    },
+  });
 }
 
 export function useSignup() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (items: { name: string; email: string; password: string }) => signup(items.name, items.email, items.password),
-        onSuccess: async (data) => {
-            await setAuthToken(data.access_token);
-            queryClient.invalidateQueries({ queryKey: ["currentUser"] });
-        },
-        onError: (error) => {
-            console.error("Signup failed:", error);
-        }
-    });
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  return useMutation({
+    mutationFn: (items: { name: string; email: string; password: string }) => signupAction(items.name, items.email, items.password),
+    onSuccess: async (data) => {
+      // cookies are set in the server action (next/headers)
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] });
+      router.push("/");
+    },
+    onError: (error) => {
+      console.error("Signup failed:", error);
+    },
+  });
 }

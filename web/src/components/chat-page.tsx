@@ -72,26 +72,33 @@ export default function ChatPage({ workspaceId, chatId, initialPrompt }: ChatPag
     // Auto-submit initial prompt
     useEffect(() => {
         if (
-            initialPrompt && 
-            !hasSubmittedInitialRef.current && 
-            chat && 
-            chat.messages.length === 0 &&
-            !isStreaming
-        ) {
-            hasSubmittedInitialRef.current = true;
-            
-            // Remove prompt from URL
-            router.replace(`/workspaces/${workspaceId}/chat/${chatId}`);
-            
-            // Submit the initial prompt
-            handleSendMessage({
-                prompt: initialPrompt,
-                model: "auto",
-                search: false,
-                agent: "",
-                files: [],
-            });
-        }
+        !initialPrompt ||
+        hasSubmittedInitialRef.current ||
+        !chat ||
+        isStreaming
+    ) {
+        return;
+    }
+
+    if (!Array.isArray(chat.messages) || chat.messages.length !== 0) {
+        return;
+    }
+
+    hasSubmittedInitialRef.current = true;
+
+    const submitInitialPrompt = async () => {
+        await handleSendMessage({
+            prompt: initialPrompt,
+            model: "auto",
+            search: false,
+            agent: "",
+            files: [],
+        });
+
+        router.replace(`/workspaces/${workspaceId}/chat/${chatId}`);
+    };
+
+    submitInitialPrompt();
     }, [initialPrompt, chat, isStreaming, handleSendMessage, router, workspaceId, chatId]);
 
     if (chatLoading) {

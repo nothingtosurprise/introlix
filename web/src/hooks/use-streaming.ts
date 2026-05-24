@@ -77,7 +77,12 @@ export function useStreaming({ onComplete, onError }: UseStreamingOptions = {}) 
         abortControllerRef.current = new AbortController();
 
         let fullResponse = "";
-        const stream = chatApi.sendMessage(workspaceId, chatId, data);
+        const stream = chatApi.sendMessage(
+          workspaceId,
+          chatId,
+          data,
+          abortControllerRef.current.signal
+        );
 
         for await (const chunk of stream) {
           // Check if aborted

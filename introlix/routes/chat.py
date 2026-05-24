@@ -40,13 +40,15 @@ from introlix.models import (
 )
 from introlix.config import AUTO_MODEL
 from introlix.utils.title_gen import generate_title
+from introlix.utils.auth import get_current_user
+from introlix.models import UserModel
 
 chat_router = APIRouter(prefix="/workspace/{workspace_id}/chat", tags=["chat"])
 
 
 @chat_router.post("/new")
 async def create_chat(
-    workspace_id: str, request: WorkspaceChat, db: AsyncSession = Depends(get_db)
+    workspace_id: str, request: WorkspaceChat, db: AsyncSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)
 ):
     """
     Create a new chat conversation in a workspace.
@@ -58,6 +60,7 @@ async def create_chat(
     Args:
         workspace_id (str): The unique identifier of the workspace.
         request (WorkspaceChat): The chat creation request containing initial chat data.
+        current_user (UserModel): The currently authenticated user.
 
     Returns:
         dict: A dictionary containing:
@@ -72,12 +75,16 @@ async def create_chat(
         Body: {"title": "My Chat"}
         Response: {"message": "Chat created", "_id": "abc123"}
     """
-    workspace = await db.execute(
+    workspace_result = await db.execute(
         select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
     )
+    workspace = workspace_result.scalar_one_or_none()
 
-    if not workspace.scalar_one_or_none():
+    if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if workspace.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to create chat in this workspace")
 
     request.workspace_id = workspace_id
 
@@ -86,7 +93,7 @@ async def create_chat(
             status_code=400, detail="New chat cannot have pre-existing messages"
         )
 
-    item_dict = request.model_dump(exclude={"title", "id"})
+    item_dict = request.model_dump(exclude={"title", "id", "created_at", "updated_at"})
     result = WorkspaceChatModel(title="New Chat", **item_dict)
     db.add(result)
     await db.commit()
@@ -100,6 +107,7 @@ async def chat(
     chat_id: str,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Send a message to a chat and receive a streaming response.
@@ -142,6 +150,7 @@ async def chat(
         select(WorkspaceChatModel).where(
             WorkspaceChatModel.id == chat_id,
             WorkspaceChatModel.workspace_id == workspace_id,
+            WorkspaceChatModel.workspace.has(WorkspaceModel.user_id == current_user.id)
         )
     )
 
@@ -251,7 +260,7 @@ async def chat(
 
 
 @chat_router.get("/{chat_id}/")
-async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
+async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     """
     Retrieve all messages from a chat conversation.
 
@@ -275,7 +284,7 @@ async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
         GET /workspace/123/chat/abc/
         Response: {"_id": "abc", "title": "My Chat", "messages": [...]}
     """
-    query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id)
+    query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id).where(WorkspaceChatModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     result = await db.execute(query)
     chat = result.scalar_one_or_none()
 
@@ -285,7 +294,7 @@ async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @chat_router.delete("/{chat_id}/")
-async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     """
     Delete a chat conversation and its entire history.
 
@@ -306,7 +315,7 @@ async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db)):
         DELETE /workspace/123/chat/abc/
         Response: {"message": "Chat deleted successfully"}
     """
-    query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id)
+    query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id).where(WorkspaceChatModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     result = await db.execute(query)
     chat = result.scalar_one_or_none()
 
