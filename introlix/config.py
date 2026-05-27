@@ -2,6 +2,7 @@ import os
 from platformdirs import user_data_dir
 from pathlib import Path
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv()
 
@@ -21,8 +22,11 @@ APP_AUTHOR = "introlix-ai"
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
-# Database config
-DATABASE_URL = "sqlite+aiosqlite:///introlix.db"
+# Database 
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+DATABASE_URL = f"sqlite+aiosqlite:///{DATA_DIR}/introlix.db"
 
 # model config
 HF_MODEL_URL = "https://huggingface.co/{username}/{repo_id}/resolve/{branch_name}/{model_name}?download=true"
