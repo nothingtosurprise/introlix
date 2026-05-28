@@ -50,3 +50,6 @@ SUPPORTED_LLMs = [
     {"name": "Gemini 3.1 Flash Lite Preview", "value": "gemini-3.1-flash-lite-preview", "provider": "google_ai_studio"},
     {"name": "Gemini 3 Flash Preview", "value": "gemini-3-flash-preview", "provider": "google_ai_studio"},
 ]
+
+# Some settings for the app
+MIN_RELEVANCE_SCORE = 0.40

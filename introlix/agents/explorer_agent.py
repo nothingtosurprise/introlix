@@ -48,8 +48,7 @@ import hashlib
 from typing import List, Union
 from pydantic import BaseModel, Field
 import chromadb
-from chromadb.config import Settings
-from ddgs import DDGS
+from introlix.config import MIN_RELEVANCE_SCORE
 from introlix.tools.web_crawler import web_crawler, ScrapeResult
 from introlix.tools.web_search import SearXNGClient, duckduckgo_search
 from introlix.utils.text_chunker import TextChunker
@@ -105,7 +104,7 @@ class ExplorerAgent:
 
         if self.get_answer:
             all_answers = []
-            queries_needing_data = []
+            queries_needing_data = [] # list of queries that need data retrieval
 
             tasks = [self.process_single_query(q) for q in queries_to_search]
             task_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -176,7 +175,7 @@ class ExplorerAgent:
             for idx in range(len(ids)):
                 raw_distance = distances[idx] if distances else 1.0
                 score = max(0.0, 1 - raw_distance / 2)
-                if score <= 0:
+                if score <= MIN_RELEVANCE_SCORE:
                     continue
                 meta = metadatas[idx]
                 try:
@@ -411,7 +410,7 @@ if __name__ == "__main__":
     explorer_agent = ExplorerAgent()
     results = asyncio.run(
         explorer_agent.run(
-            queries=["latest android 17 news"],
+            queries=["best open source models in 2026"],
             unique_id="test8",
             get_answer=True,
             max_results=5,
