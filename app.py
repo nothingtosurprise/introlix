@@ -1,4 +1,4 @@
-from pinecone import Pinecone
+import chromadb
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, literal_column, desc, delete
 from introlix.database import get_db, init_db
@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo import DESCENDING
 from contextlib import asynccontextmanager
 from introlix.state import app_state
-from introlix.config import PINECONE_KEY, SUPPORTED_LLMs
+from introlix.config import SUPPORTED_LLMs
 from sentence_transformers import SentenceTransformer
 
 
@@ -29,7 +29,6 @@ from sentence_transformers import SentenceTransformer
 async def lifespan(app: FastAPI):
     # adding embedding model and pinecone client to app state
     app_state.embedding_model = SentenceTransformer("all-mpnet-base-v2")
-    app_state.pc = Pinecone(api_key=PINECONE_KEY)
     await init_db()
 
     # explorer agent setup
@@ -40,7 +39,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Introlix", openapi_prefix="/api/v1", lifespan=lifespan)
-pc = Pinecone(api_key=PINECONE_KEY)
 
 app.add_middleware(
     CORSMiddleware,
@@ -202,7 +200,7 @@ async def get_workspace(
         "updated_at": workspace.updated_at,
     }
 
-
+# Delete a workspace and all its related items (chats, research desks, etc.)
 @app.delete("/workspaces/{id}", tags=["workspace"])
 async def delete_workspace(
     id: str,
@@ -219,11 +217,10 @@ async def delete_workspace(
     if workspace.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # External Cleanup: Delete Search Vector Data (Pinecone)
+    # External Cleanup: Delete Search Vector Data (Chromadb)
     try:
-        index = pc.Index("explored-data-index")
-        # Keep using the string representation of your ID for external tracking services
-        index.delete(namespace="Search", filter={"unique_id": str(id)})
+        chroma_client = chromadb.PersistentClient(path="./chroma_db")
+        chroma_client.delete_collection(name=f"workspace_{str(workspace.id).replace('-', '_')}")
     except Exception:
         pass  # If vector index cleanup fails or is empty, skip quietly
 
