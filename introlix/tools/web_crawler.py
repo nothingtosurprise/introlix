@@ -29,15 +29,15 @@ import httpx
 import trafilatura
 from typing import Union, Optional
 from pydantic import BaseModel, Field
-from playwright.async_api import async_playwright, Browser, Playwright
+from playwright.async_api import BrowserContext, async_playwright, Browser, Playwright
 import pdfplumber
 from io import BytesIO
 
 # Config
-PER_URL_TIMEOUT = 8
+PER_URL_TIMEOUT = 10
 HTTPX_TIMEOUT = 4
-CONCURRENCY = 15
-BLOCKED_RESOURCES = {"image", "media", "font", "stylesheet", "other"}
+CONCURRENCY = 10
+BLOCKED_RESOURCES = {"image", "media", "font", "other"}
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -62,12 +62,12 @@ async def get_httpx_client() -> httpx.AsyncClient:
                 verify=False,
                 follow_redirects=True,
                 limits=httpx.Limits(
-                    max_connections=50,
-                    max_keepalive_connections=20,
-                    keepalive_expiry=30,
+                    max_connections=100,
+                    max_keepalive_connections=40,
+                    keepalive_expiry=15,
                 ),
                 timeout=httpx.Timeout(
-                    connect=3.0, read=HTTPX_TIMEOUT, write=3.0, pool=2.0
+                    connect=3.0, read=HTTPX_TIMEOUT, write=3.0, pool=3.0
                 ),
                 headers={
                     "User-Agent": random.choice(USER_AGENTS),
@@ -89,6 +89,8 @@ async def close_httpx_client():
 _playwright_instance: Optional[Playwright] = None
 _browser_instance: Optional[Browser] = None
 _browser_lock = asyncio.Lock()
+_shared_context: Optional[BrowserContext] = None
+_browser_lock = asyncio.Lock()
 
 PLAYWRIGHT_ARGS = [
     "--disable-blink-features=AutomationControlled",
@@ -102,16 +104,35 @@ PLAYWRIGHT_ARGS = [
     "--disable-backgrounding-occluded-windows",
 ]
 
-
-async def get_browser() -> Browser:
-    global _playwright_instance, _browser_instance
+async def get_shared_context() -> BrowserContext:
+    global _playwright_instance, _browser_instance, _shared_context
     async with _browser_lock:
         if _browser_instance is None or not _browser_instance.is_connected():
             _playwright_instance = await async_playwright().start()
             _browser_instance = await _playwright_instance.chromium.launch(
                 headless=True, args=PLAYWRIGHT_ARGS
             )
-    return _browser_instance
+            _shared_context = await _browser_instance.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent=random.choice(USER_AGENTS),
+                locale="en-US",
+                java_script_enabled=True,
+                ignore_https_errors=True,
+            )
+    return _shared_context
+
+
+async def close_browser():
+    global _playwright_instance, _browser_instance, _shared_context
+    if _shared_context:
+        await _shared_context.close()
+        _shared_context = None
+    if _browser_instance:
+        await _browser_instance.close()
+        _browser_instance = None
+    if _playwright_instance:
+        await _playwright_instance.stop()
+        _playwright_instance = None
 
 
 async def close_browser():
@@ -158,23 +179,12 @@ async def fetch_httpx(url: str) -> tuple[str | bytes, bool, int]:
         return "", False, resp.status_code
     except httpx.TimeoutException:
         return "", False, 0
-    except httpx.ConnectError as e:
-        print(f"[httpx] connect error {url}: {e}")
-        return "", False, 0
-    except Exception as e:
-        print(f"[httpx] {type(e).__name__} {url}: {e}")
+    except Exception:
         return "", False, 0
 
 
 async def fetch_playwright(url: str) -> tuple[str | bytes, bool]:
-    browser = await get_browser()
-    context = await browser.new_context(
-        viewport={"width": 1280, "height": 800},
-        user_agent=random.choice(USER_AGENTS),
-        locale="en-US",
-        java_script_enabled=True,
-        ignore_https_errors=True,
-    )
+    context = await get_shared_context()
     page = await context.new_page()
 
     # Block heavy resources — biggest Playwright speedup
@@ -186,18 +196,11 @@ async def fetch_playwright(url: str) -> tuple[str | bytes, bool]:
 
     await page.route("**/*", block_heavy)
 
-    await page.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US','en'] });
-        window.chrome = { runtime: {} };
-    """)
-
     try:
         response = await page.goto(
             url,
-            wait_until="commit",
-            timeout=6_000,
+            wait_until="domcontentloaded",
+            timeout=7000,
         )
         if response is None:
             return "", False
@@ -205,8 +208,8 @@ async def fetch_playwright(url: str) -> tuple[str | bytes, bool]:
         ct = response.headers.get("content-type", "").lower()
         if "application/pdf" in ct:
             return await response.body(), True
-
-        await asyncio.sleep(0.8)
+        
+        await asyncio.sleep(0.5)
         html = await page.content()
         return html, False
 
@@ -214,7 +217,7 @@ async def fetch_playwright(url: str) -> tuple[str | bytes, bool]:
         print(f"[playwright] {type(e).__name__} {url}: {e}")
         return "", False
     finally:
-        await context.close()
+        await page.close()
 
 
 async def extract_pdf(pdf_bytes: bytes) -> tuple[str, str, str]:
@@ -274,69 +277,56 @@ async def web_crawler(url: str) -> ScrapeResult:
             )
 
 
-def is_thin(text: str, min_chars: int = 250) -> bool:
+def is_thin(text: str, min_chars: int = 200) -> bool:
     return not text or len(text.strip()) < min_chars
-
 
 def extract_html(html: str, url: str) -> tuple[str, str, str]:
     data = trafilatura.extract(html, url=url, output_format="json", with_metadata=True)
-    if not data:
-        return "", "", ""
-    p = json.loads(data)
-    return p.get("title") or "", p.get("description") or "", p.get("text") or ""
-
+    if data:
+        p = json.loads(data)
+        txt = p.get("text") or ""
+        if not is_thin(txt):
+            return p.get("title") or "", p.get("description") or "", txt
+            
+    fallback_txt = trafilatura.html2text(html) or ""
+    return "Scraped Page", "", fallback_txt
 
 async def _race_fetch(url: str) -> ScrapeResult:
-    """
-    Start httpx AND playwright at the same time.
-
-    Old pattern (sequential):
-      httpx fails after 4s → start playwright → playwright takes 15s → total: 19s
-
-    New pattern (race):
-      httpx starts at t=0, playwright starts at t=0
-      httpx returns thin content at t=3 → keep waiting for playwright
-      playwright returns good content at t=5 → done, cancel httpx
-      total: 5s (not 19s)
-    """
     httpx_task = asyncio.create_task(fetch_httpx(url))
     pw_task = asyncio.create_task(fetch_playwright(url))
 
     title, desc, text = "", "", ""
     content, is_pdf, status = "", False, 0
 
-    # Phase 1: give httpx HTTPX_TIMEOUT seconds
     try:
-        content, is_pdf, status = await asyncio.wait_for(
-            asyncio.shield(httpx_task), timeout=HTTPX_TIMEOUT
+        done, pending = await asyncio.wait(
+            {httpx_task}, timeout=HTTPX_TIMEOUT, return_when=asyncio.FIRST_COMPLETED
         )
-        if status == 200 and content:
-            if is_pdf:
-                pw_task.cancel()
-                t, d, tx = await extract_pdf(content)
-                return ScrapeResult(
-                    url=url, text=tx, title=t, description=d, method="httpx-pdf"
-                )
 
-            title, desc, text = extract_html(content, url)
-            if not is_thin(text):
-                # Good content from httpx — cancel playwright, return immediately
-                pw_task.cancel()
-                return ScrapeResult(
-                    url=url, text=text, title=title, description=desc, method="httpx"
-                )
+        if httpx_task in done:
+            content, is_pdf, status = httpx_task.result()
+            if status == 200 and content:
+                if is_pdf:
+                    pw_task.cancel()
+                    t, d, tx = await extract_pdf(content)
+                    return ScrapeResult(
+                        url=url, text=tx, title=t, description=d, method="httpx-pdf"
+                    )
 
-    except asyncio.TimeoutError:
-        pass  # playwright is already running — just proceed to phase 2
+                title, desc, text = extract_html(content, url)
+                if not is_thin(text):
+                    pw_task.cancel()
+                    return ScrapeResult(
+                        url=url, text=text, title=title, description=desc, method="httpx"
+                    )
+    except Exception:
+        pass
 
-    # Phase 2: playwright started at t=0 so it has already been running
-    # We only have remaining budget = PER_URL_TIMEOUT - HTTPX_TIMEOUT
     try:
         remaining = max(PER_URL_TIMEOUT - HTTPX_TIMEOUT - 0.1, 1.0)
         pw_content, pw_is_pdf = await asyncio.wait_for(pw_task, timeout=remaining)
 
         if pw_is_pdf and pw_content:
-            httpx_task.cancel()
             t, d, tx = await extract_pdf(pw_content)
             return ScrapeResult(
                 url=url, text=tx, title=t, description=d, method="playwright-pdf"
@@ -345,17 +335,16 @@ async def _race_fetch(url: str) -> ScrapeResult:
         if pw_content:
             t, d, tx = extract_html(pw_content, url)
             if not is_thin(tx):
-                httpx_task.cancel()
                 return ScrapeResult(
                     url=url, text=tx, title=t, description=d, method="playwright"
                 )
-
-    except asyncio.TimeoutError:
+    except Exception:
         pass
-
-    # Phase 3: return best we have (even if thin)
-    httpx_task.cancel()
-    pw_task.cancel()
+    finally:
+        if not httpx_task.done():
+            httpx_task.cancel()
+        if not pw_task.done():
+            pw_task.cancel()
 
     best_text = text if not is_thin(text) else ""
     best_title = title
@@ -363,8 +352,8 @@ async def _race_fetch(url: str) -> ScrapeResult:
     return ScrapeResult(
         url=url,
         text=best_text,
-        title=best_title,
-        description=desc,
+        title=best_title if best_title else url[:50],
+        description=desc if desc else "",
         method="partial" if best_text else "failed",
         error="" if best_text else f"no content extracted (httpx status={status})",
     )
@@ -377,7 +366,7 @@ async def shutdown():
 if __name__ == "__main__":
     result = asyncio.run(
         web_crawler(
-            "https://www.reddit.com/r/Nepal/comments/1nt9bc9/my_thoughts_directly_elected_pm_is_not_a_good/"
+            ""
         )
     )
     print(result)

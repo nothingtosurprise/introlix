@@ -15,7 +15,7 @@ from introlix.models import (
 )
 from introlix.schemas import PaginatedResponse
 from introlix.routes.chat import chat_router
-from introlix.tools.web_crawler import get_httpx_client, get_browser, shutdown
+from introlix.tools.web_crawler import get_httpx_client, get_shared_context, shutdown
 from introlix.routes.research_desk import research_desk_router
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import DESCENDING
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
     # explorer agent setup
     await get_httpx_client()
-    await get_browser()
+    await get_shared_context()
     yield
     await shutdown()  # Shutdown the HTTPX client and browser when the app stops
 

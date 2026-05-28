@@ -54,6 +54,7 @@ dependencies = [
     "pyjwt>=2.12.1",
     "bcrypt>=5.0.0",
     "aiosqlite>=0.22.1",
+    "chromadb>=1.5.9",
 ]
 [tool.setuptools.packages.find]
 include = ["introlix*"]

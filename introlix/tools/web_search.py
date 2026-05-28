@@ -28,6 +28,7 @@ import asyncio
 import time
 import logging
 from datetime import datetime
+from ddgs import DDGS
 from typing import Optional, List
 from pydantic import Field, BaseModel, ValidationError
 from introlix.config import SEARCHXNG_HOST
@@ -373,6 +374,30 @@ class SearXNGClient:
             logger.error("Error filtering results:", str(e))
             return results[:max_results]
 
+def duckduckgo_search(query: str, max_results: int = 5) -> List[WebpageSnippet]:
+    """
+    Perform a web search using DuckDuckGo.
+
+    This function uses the ddgs library to perform a search on DuckDuckGo and returns
+    a list of relevant search results.
+
+    Args:
+        query (str): The search query.
+        max_results (int): Maximum number of results to return. Defaults to 5.
+
+    Returns:
+        List[WebpageSnippet]: List of search results from DuckDuckGo.
+    """
+    with DDGS() as ddgs:
+        results = []
+        for r in ddgs.text(query, max_results=max_results):
+            snippet = WebpageSnippet(
+                url=r.get("href", ""),
+                title=r.get("title", ""),
+                description=r.get("body", ""),
+            )
+            results.append(snippet)
+        return results
 
 if __name__ == "__main__":
     client = SearXNGClient(model="gemini-2.5-flash", min_delay_between_requests=6.0)
