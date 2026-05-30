@@ -41,6 +41,7 @@ from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from introlix.prompts import context_agent_prompt
 from introlix.agents.baseclass import AgentInput, AgentOutput, BaseAgent, PromptTemplate
 
 
@@ -172,112 +173,14 @@ class ContextAgent(BaseAgent):
         super().__init__(config=config, model=model, max_iterations=max_iterations)
         self.logger = logging.getLogger(__name__)
 
-        self.conversation_history = conversation_history
+        self.row_instruction = context_agent_prompt.strip().format(
+            current_date=datetime.now().strftime("%Y-%m-%d")
+        )
 
-        self.row_instruction = f"""
-        You are a Context Agent in the Introlix Platform - a sophisticated multi-agent system for automated research. Your role is CRITICAL as you determine the entire research workflow that follows.
-        
-        Today's date is {datetime.now().strftime("%Y-%m-%d")}
+    def _create_tools(self):
+        """ContextAgent does not use any tools, so this method is a no-op."""
+        pass
 
-        ## Your Mission
-        Gather ALL necessary information from the user before research begins. You are the gateway that determines whether the research will be successful or fail. Your output directly controls:
-        - Planner Agent (creates research plans)
-        - Explorer Agents (web searches in parallel)
-        - Verifier Agent (fact-checking)
-        - Knowledge Gap Agent (quality control)
-        - Researcher Agent (final synthesis)
-
-        ## Critical Analysis Required
-        You MUST thoroughly analyze this input and determine if you have enough context for successful research. Consider:
-
-        ### Query Specificity Assessment
-        1. Is the query specific enough for meaningful research?
-        2. What are the exact research objectives?
-        3. What specific information is the user seeking?
-        4. Are there any ambiguities that could lead to poor research outcomes?
-
-        ### Research Type & Scope Analysis
-        5. What type of research is being requested? (academic, business, technical, news, etc.)
-        6. How should the research scope (narrow/medium/comprehensive) affect the approach?
-        7. What level of detail is expected in the final output?
-        8. What is the intended use of the research results?
-
-        ### Source Requirements & Quality
-        9. What sources would be most appropriate and credible?
-        10. What types of evidence would be most valuable?
-        11. Are there any specific domains, timeframes, or geographic considerations?
-        12. What would constitute "high-quality" sources for this query?
-
-        ### User Context Integration
-        13. If user files are provided, how do they inform the research direction?
-        14. What context from previous answers should influence the research?
-        15. Are there any constraints or preferences mentioned?
-
-        ### Research Parameters Optimization
-        16. What would be the optimal research parameters for this specific query?
-        17. How should the research scope influence parameter selection?
-        18. What resource allocation would be most effective?
-
-        ## Required Output Structure
-        Respond with a JSON object containing:
-        - type: "final"
-        - answer: JSON object with the following structure:
-        {{
-            "questions": ["specific clarifying question 1", "specific clarifying question 2"],
-            "move_next": true/false,
-            "confidence_level": 0.0-1.0,
-            "final_prompt": "detailed, enriched, and comprehensive prompt that consolidates ALL user input and context",
-            "research_parameters": {{
-            "estimated_duration": "CHOOSE ONE: short OR medium OR long",
-            "complexity_level": "CHOOSE ONE: basic OR intermediate OR advanced", 
-            "required_sources": "CHOOSE ONE: academic OR news OR mixed OR technical",
-            "research_depth": "CHOOSE ONE: surface OR detailed OR comprehensive"
-            }}
-        }}
-
-        ## Critical Guidelines
-        - CONFIDENCE_LEVEL: If < 0.7, ask clarifying questions (max 5 to avoid user fatigue)
-        - CONFIDENCE_LEVEL: If >= 0.7, proceed to next agent
-        - CONFIDENCE_LEVEL helps determine if borderline cases should proceed
-        - FINAL_PROMPT: Must be comprehensive and include ALL relevant context from user files and answers
-        - Track conversation history to avoid repeating questions
-        - RESEARCH_PARAMETERS: Must guide downstream agent behavior and resource allocation
-        - Choose appropriate values for each research parameter based on thorough query analysis
-        - Consider research scope (narrow/medium/comprehensive) when setting parameters
-        - Ensure the research can be transformed into a full research paper if needed
-        - Consider both deep research and quick shallow search capabilities of the platform
-
-        Note: Never make move_next ture if CONFIDENCE_LEVEL < 0.7
-
-        ## Quality Standards
-        Your output determines the success of the entire research pipeline. Be thorough, precise, and comprehensive in your analysis.
-
-
-        ## EXAMPLE OUTPUT 1: Need More Info
-
-        ```json
-        {{
-        "type": "final",
-        "answer": {{
-            "questions": [
-            "What time period should this research cover?",
-            "Are you looking for academic research or industry applications?"
-            ],
-            "move_next": false,
-            "confidence_level": 0.5,
-            "final_prompt": "User wants research on AI in healthcare but scope needs clarification",
-            "research_parameters": {{
-            "estimated_duration": "medium",
-            "complexity_level": "intermediate",
-            "required_sources": "mixed",
-            "research_depth": "detailed"
-            }}
-        }}
-        }}
-        ```
-
-        NOTE: AT ANY COST DO NOT GIVE OUTPUT OUTSIDE OF THE JSON FORMAT AS I HAVE GIVEN YOU. ALWAYS MAKE SURE TO PRODUCE SAME FORMAT JSON. AND ALSO DO NOT REPEAT ANY QUESTIONS.
-        """
 
     def _build_prompt(self, user_prompt: str, state: Dict[str, Any]) -> PromptTemplate:
         """
@@ -610,7 +513,7 @@ async def run_context_agent():
         print(f"\n=== Iteration {iteration + 1} ===")
 
         # Make LLM call ONLY here, after user has provided input
-        print("🤖 Processing your query...")
+        print("Processing your query...")
         result: AgentOutput = await agent.run_loop(user_prompt=json.dumps(user_query))
 
         print("\n=== Agent Output ===")
@@ -621,14 +524,14 @@ async def run_context_agent():
 
         # Check if we should proceed to next agent
         if result.result.move_next:
-            print("\n✅ Enough context gathered, moving to next agent...")
+            print("\nEnough context gathered, moving to next agent...")
             print(f"\nFinal Prompt: {result.result.final_prompt}")
             print(f"Research Parameters: {result.result.research_parameters}")
             break
 
         # If there are questions, ask the user and WAIT for complete input
         if result.result.questions:
-            print("\n🤖 Clarification Questions:")
+            print("\nClarification Questions:")
             for i, question in enumerate(result.result.questions, 1):
                 print(f"{i}. {question}")
 
@@ -640,10 +543,10 @@ async def run_context_agent():
 
             # Only AFTER getting the answer, update the query for next iteration
             user_query["answer_to_questions"] = user_answers
-            print("✅ Got your answers, processing...")
+            print("Got your answers, processing...")
         else:
             print(
-                "\n⚠️ Agent didn't ask questions but also not ready to proceed. Breaking loop."
+                "\nAgent didn't ask questions but also not ready to proceed. Breaking loop."
             )
             break
 
@@ -651,7 +554,7 @@ async def run_context_agent():
 
     if iteration >= max_question_iterations:
         print(
-            f"\n⚠️ Reached maximum question iterations ({max_question_iterations}). Proceeding anyway."
+            f"\nReached maximum question iterations ({max_question_iterations}). Proceeding anyway."
         )
 
 

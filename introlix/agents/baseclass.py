@@ -18,6 +18,7 @@ communication, tool execution, and output handling.
 import json
 import inspect
 from abc import ABC, abstractmethod
+import logging
 from typing import Any, Dict, List, Optional, Type, Callable, Union, AsyncGenerator
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -151,7 +152,7 @@ class BaseAgent(ABC):
     """
 
     def __init__(
-        self, model, config: Optional[AgentInput] = None, max_iterations: int = 10
+        self, model, config: Optional[AgentInput] = None, max_iterations: int = 10, conversation_history: Optional[List[Dict]] = None
     ):
         """
         Initialize the BaseAgent.
@@ -160,15 +161,32 @@ class BaseAgent(ABC):
             model: The LLM model to use.
             config (Optional[AgentInput]): Configuration object containing tools, description, etc.
             max_iterations (int): Maximum number of iterations for the run loop. Defaults to 10.
+            conversation_history (Optional[List[Dict]]): A list of previous conversation messages. Defaults to None.
         """
         self.config = config
         self.model = model
         self.instruction = ""
         self.max_iterations = max_iterations
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+        self.conversation_history = conversation_history or []
 
         for supported in SUPPORTED_LLMs:
                 if self.model == supported["value"]:
                     self.CLOUD_PROVIDER = supported["provider"]
+
+    @abstractmethod
+    def _create_tools(self):
+        """
+        Abstract method to create and return the list of tools for the agent.
+
+        Subclasses must implement this to define the specific tools that the agent can use.
+        This method is called during initialization to populate the `tools` attribute in the config.
+
+        Returns:
+            List[Tool]: A list of Tool instances that the agent can utilize.
+        """
+        pass
 
     async def _call_llm(
         self, prompt: str, cloud: bool = True, stream: bool = False
@@ -205,6 +223,64 @@ class BaseAgent(ABC):
                 ],
             )
             return output.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+    def _build_messages_array(
+        self, user_prompt: str, state: Dict[str, Any]
+    ) -> List[Dict]:
+        """
+        Constructs the list of messages to send to the LLM.
+
+        This includes:
+        1. The system prompt.
+        2. Recent conversation history (truncated to manage context).
+        3. The current user prompt.
+        4. Results from any tools executed in the current turn.
+        5. Instructions for the agent to make a decision (JSON format).
+
+        Args:
+            user_prompt (str): The current user query.
+            state (Dict[str, Any]): The current state containing tool results and history.
+
+        Returns:
+            List[Dict]: A list of message dictionaries formatted for the LLM.
+        """
+        messages = [{"role": "system", "content": self.instruction}]
+
+        # Add conversation history (last 10 messages to manage tokens)
+        recent_history = (
+            self.conversation_history[-10:]
+            if len(self.conversation_history) > 10
+            else self.conversation_history
+        )
+
+        for msg in recent_history:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role in ["user", "assistant"] and content:
+                messages.append({"role": role, "content": content})
+
+        # Build current user prompt with tool results if any
+        current_prompt_parts = [f"User Query: {user_prompt}"]
+
+        if state.get("tool_results"):
+            current_prompt_parts.append("\nTool Results:")
+            for tool_name, result in state["tool_results"].items():
+                current_prompt_parts.append(f"\n{tool_name}:\n{result}")
+
+        if state.get("history"):
+            last_step = state["history"][-1]
+            if last_step.get("parsed"):
+                parsed = last_step["parsed"]
+                if isinstance(parsed, dict) and parsed.get("needs_more_info"):
+                    current_prompt_parts.append(
+                        "\n\nYou indicated you need more info. What do you need next?"
+                    )
+
+        current_prompt_parts.append("\n\nYour decision (respond in JSON):")
+
+        messages.append({"role": "user", "content": "\n".join(current_prompt_parts)})
+
+        return messages
 
     async def _call_llm_with_messages(self, messages: List[Dict], stream: bool = False):
         """
@@ -278,7 +354,7 @@ class BaseAgent(ABC):
         try:
             parsed_output = await self._parse_output(raw_output)
         except Exception as e:
-            print(f"Parse failed: {e}")  # Using print instead of self.logger
+            self.logger.error(f"Parse failed: {e}")
             parsed_output = raw_output
 
         state["history"].append({"step": 1, "raw": raw_output, "parsed": parsed_output})

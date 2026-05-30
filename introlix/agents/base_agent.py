@@ -57,6 +57,9 @@ class Agent(BaseAgent):
         self.row_instruction = instruction
         self.output_model_class = output_model_class
 
+    def _create_tools(self) -> Dict[str, Any]:
+        pass
+
     def _build_prompt(self, user_prompt: str, state: Dict[str, Any]) -> PromptTemplate:
         """
         Constructs the prompt template for the LLM based on the user input and current state.

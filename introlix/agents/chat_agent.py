@@ -27,6 +27,7 @@ from introlix.agents.baseclass import (
 from introlix.agents.explorer_agent import ExplorerAgent
 from introlix.llm_config import cloud_llm_manager
 from introlix.config import CLOUD_PROVIDER
+from introlix.prompts import chat_agent_prompt
 from ddgs import DDGS
 
 class ToolCall(BaseModel):
@@ -50,42 +51,6 @@ class AgentDecision(BaseModel):
     needs_more_info: Optional[bool] = Field(
         default=False, description="Whether more information is needed"
     )
-
-
-INSTRUCTION = """
-You are Introlix Chat a part of Introlix. You task is to chat with user and answer to users query. Today's date is {date}. Always provide up-to-date information.
-You have access to internet search using search and fast_search tool. You have access to mutliple tools:
-{tools}
-
-Decision format (respond in JSON):
-{{
-    "type": "tool" | "final",
-    "thought": "your reasoning",
-    "tool_calls": [{{"name": "tool_name", "input": {{...}}}}],  // if type is "tool"
-    "answer": "your answer",  // if type is "final"
-    "needs_more_info": true/false  // whether you need another iteration
-}}
-
-Guidelines:
-1. Always use search or fast_search tool when you needs to get latest information or you don't know the answer.
-2. Don't make a fake or dummy data when you don't know. If a user asks anything that you don't know or you need more information then you again you search tool.
-3. If you already know the answer, set type="final" immediately
-4. If tool results are sufficient, set needs_more_info=false
-5. Always incldue search source at the end of the answer.
-6. Don't add any tokens like <｜begin▁of▁sentence｜> or other extra tokens that user don't needs to see
-
-Examples:
-
-User: "What is the capital of France?"
-Response: {{"type": "final", "thought": "I know this", "answer": "The capital of France is Paris."}}
-
-User: "Compare GPT-5 and Gemini 2.5"
-Response: {{"type": "tool", "thought": "Need to search both", "tool_calls": [{{"name": "search", "input": {{"queries": ["GPT-5 features", "Gemini 2.5 features"]}}}}], "needs_more_info": false}}
-
-User: "What's the weather in Paris?"
-Response: {{"type": "tool", "thought": "Need current weather data", "tool_calls": [{{"name": "fast_search", "input": {{"queries": ["weather in Paris today"]}}}}], "needs_more_info": false}}
-"""
-
 
 class ChatAgent(BaseAgent):
     """
@@ -130,17 +95,16 @@ class ChatAgent(BaseAgent):
                 description="An intelligent agent that can search and reason",
                 tools=self._create_tools(),
             )
-        super().__init__(model, config, max_iterations)
+        super().__init__(model, config, max_iterations, conversation_history)
 
         self.unique_id = unique_id
         self.tools = [{"name": "search", "description": "Search on internet."}, {"name": "fast_search", "description": "A faster search tool using DDGS."}]
 
         self.explorer = ExplorerAgent()
 
-        self.sys_prompt = INSTRUCTION.format(
-            date=datetime.now().strftime("%Y-%m-%d"), tools=self.tools
+        self.instruction = chat_agent_prompt.strip().format(
+            date=datetime.now().strftime("%Y-%m-%d"), tools=self.tools, tools_info="\n".join([f"- {t['name']}: {t['description']}" for t in self.tools])
         )
-        self.conversation_history = conversation_history or []
 
     def _create_tools(self):
         """
@@ -198,83 +162,6 @@ class ChatAgent(BaseAgent):
             ),
         ]
 
-    def _build_messages_array(
-        self, user_prompt: str, state: Dict[str, Any]
-    ) -> List[Dict]:
-        """
-        Constructs the list of messages to send to the LLM.
-
-        This includes:
-        1. The system prompt.
-        2. Recent conversation history (truncated to manage context).
-        3. The current user prompt.
-        4. Results from any tools executed in the current turn.
-        5. Instructions for the agent to make a decision (JSON format).
-
-        Args:
-            user_prompt (str): The current user query.
-            state (Dict[str, Any]): The current state containing tool results and history.
-
-        Returns:
-            List[Dict]: A list of message dictionaries formatted for the LLM.
-        """
-        messages = [{"role": "system", "content": self.sys_prompt}]
-
-        # Add conversation history (last 10 messages to manage tokens)
-        recent_history = (
-            self.conversation_history[-10:]
-            if len(self.conversation_history) > 10
-            else self.conversation_history
-        )
-
-        for msg in recent_history:
-            role = msg.get("role")
-            content = msg.get("content")
-            if role in ["user", "assistant"] and content:
-                messages.append({"role": role, "content": content})
-
-        # Build current user prompt with tool results if any
-        current_prompt_parts = [f"User Query: {user_prompt}"]
-
-        if state.get("tool_results"):
-            current_prompt_parts.append("\nTool Results:")
-            for tool_name, result in state["tool_results"].items():
-                current_prompt_parts.append(f"\n{tool_name}:\n{result}")
-
-        if state.get("history"):
-            last_step = state["history"][-1]
-            if last_step.get("parsed"):
-                parsed = last_step["parsed"]
-                if isinstance(parsed, dict) and parsed.get("needs_more_info"):
-                    current_prompt_parts.append(
-                        "\n\nYou indicated you need more info. What do you need next?"
-                    )
-
-        current_prompt_parts.append("\n\nYour decision (respond in JSON):")
-
-        messages.append({"role": "user", "content": "\n".join(current_prompt_parts)})
-
-        return messages
-
-    async def _call_llm_with_messages(self, messages: List[Dict], stream: bool = False):
-        """
-        Calls the LLM with the constructed message array.
-
-        Args:
-            messages (List[Dict]): The list of messages to send.
-            stream (bool): Whether to stream the response. Defaults to False.
-
-        Returns:
-            The response from the LLM (string or generator).
-        """
-        output = await cloud_llm_manager(
-            model_name=self.model,
-            provider=CLOUD_PROVIDER,
-            messages=messages,
-            stream=stream,
-        )
-        return output
-
     def _build_prompt(self, user_prompt: str, state: Dict[str, Any]) -> PromptTemplate:
         """
         Legacy method required by BaseAgent but not used in this implementation.
@@ -303,7 +190,7 @@ class ChatAgent(BaseAgent):
         """
         state = {"history": [], "tool_results": {}}
 
-        for iteration in range(self.max_iterations):
+        for _ in range(self.max_iterations):
             messages = self._build_messages_array(user_prompt, state)
 
             # Call LLM (non-streaming for decision)
@@ -345,14 +232,11 @@ class ChatAgent(BaseAgent):
                     decision_dict = json.loads(raw_output)
                     decision = AgentDecision(**decision_dict)
                 except:
-                    yield json.dumps(
-                        {
-                            "type": "error",
-                            "content": "Could not parse LLM output as JSON",
-                            "error": str(e),
-                        }
-                    ) + "\n"
-                    break
+                    decision = AgentDecision(
+                        type="final",
+                        thought="",
+                        answer=raw_output,
+                    )
 
             # Show thought process
             if decision.thought:
