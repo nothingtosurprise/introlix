@@ -4,10 +4,14 @@ import { Check, ChevronDown, ChevronUp, Copy, Info, Loader2, Search } from 'luci
 import React, { useMemo, useState } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Streamdown } from 'streamdown';
+// import { code } from '@streamdown/code';
+import { mermaid } from '@streamdown/mermaid';
+import { math } from '@streamdown/math';
+import { cjk } from '@streamdown/cjk';
 import { Button } from './ui/button';
 import { ButtonGroup } from './ui/button-group';
+import { code } from '@streamdown/code';
 
 interface ChatMessageProps {
     message: Message;
@@ -30,7 +34,7 @@ export const ChatMessage = ({ message, isStreaming = false }: ChatMessageProps) 
 
         const thoughts: string[] = [];
         const tools: ToolCall[] = [];
-        let text = "";
+        let accumulatedRawText = "";
 
         const lines = message.content.split("\n");
 
@@ -38,7 +42,6 @@ export const ChatMessage = ({ message, isStreaming = false }: ChatMessageProps) 
             if (!line.trim()) return;
 
             try {
-                // Try to parse as JSON first
                 const data = JSON.parse(line);
 
                 if (data.type === "thinking") {
@@ -65,12 +68,12 @@ export const ChatMessage = ({ message, isStreaming = false }: ChatMessageProps) 
                         });
                     }
                 } else if (data.type === "answer_chunk" || data.type === "answer") {
-                    text += data.content;
+                    accumulatedRawText += data.content;
                 } else if (data.type === "error") {
-                    text += `\n> Error: ${data.content}\n`;
+                    accumulatedRawText += `\n> Error: ${data.content}\n`;
                 } else {
                     // Unknown JSON type, treat as text if it has content
-                    if (data.content) text += data.content;
+                    if (data.content) accumulatedRawText += data.content;
                 }
             } catch (e) {
                 // Not valid JSON
@@ -78,11 +81,16 @@ export const ChatMessage = ({ message, isStreaming = false }: ChatMessageProps) 
                     return;
                 }
                 // Otherwise treat as plain text
-                text += line + "\n";
+                accumulatedRawText += line + "\n";
             }
         });
 
-        return { text, thoughts, tools };
+        let cleanedText = accumulatedRawText
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"');
+
+        return { text: cleanedText, thoughts, tools };
     }, [message.content, message.role, isStreaming, isUser]);
 
     const handleCopy = async () => {
@@ -156,9 +164,12 @@ export const ChatMessage = ({ message, isStreaming = false }: ChatMessageProps) 
                             ))}
                         </div>
                         <div className="ml-4">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {text}
-                            </ReactMarkdown>
+                            <Streamdown plugins={{
+                                code: code,
+                                mermaid: mermaid,
+                                math: math,
+                                cjk: cjk,
+                            }}>{text}</Streamdown>
                         </div>
                         <ButtonGroup className="flex flex-wrap items-center gap-1 ml-2 my-4">
                             <Button
@@ -174,7 +185,7 @@ export const ChatMessage = ({ message, isStreaming = false }: ChatMessageProps) 
                                 size="sm"
                                 className="cursor-default text-muted-foreground"
                             >
-                                { message.model && "Model: " + message.model }
+                                {message.model && "Model: " + message.model}
                             </Button>
                         </ButtonGroup>
                     </div>

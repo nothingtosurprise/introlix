@@ -17,7 +17,7 @@ are separated, allowing it to handle large text blocks without JSON parsing erro
 import json
 from datetime import datetime
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, AsyncGenerator
+from typing import List, Optional, Dict, Any
 from introlix.agents.baseclass import (
     AgentInput,
     BaseAgent,
@@ -25,7 +25,9 @@ from introlix.agents.baseclass import (
     Tool,
 )
 from introlix.agents.explorer_agent import ExplorerAgent
+from introlix.llm_config import cloud_llm_manager
 from introlix.prompts import edit_agent_prompt
+from introlix.tools.tool_def import SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF
 
 
 class ToolCall(BaseModel):
@@ -83,16 +85,11 @@ class EditAgent(BaseAgent):
     2. Internet search integration for fact verification
     3. Maintains document structure and formatting
     4. Returns complete documents (not diffs or patches)
-    5. Supports iterative refinement with tool usage
-
-    The agent uses a special output format with <<<DOC_CONTENT>>> markers to separate
-    the JSON decision from the actual document content, avoiding JSON parsing issues
-    with large text blocks.
+    5. Uses native API tool-calling for search instead of embedding tool JSON in the prompt
 
     Attributes:
         unique_id (str): Unique identifier for the session/user.
         current_content (str): The current content of the document being edited.
-        tools (List[Dict]): Available tools (primarily search).
         sys_prompt (str): The system prompt defining agent behavior.
         conversation_history (List[Dict]): History of the conversation for context.
     """
@@ -130,17 +127,16 @@ class EditAgent(BaseAgent):
 
         self.unique_id = unique_id
         self.current_content = current_content
-        self.tools = [{"name": "search", "description": "Search on internet."}]
 
         self.explorer = ExplorerAgent()
 
         self.instruction = edit_agent_prompt.strip().format(
             date=datetime.now().strftime("%Y-%m-%d"),
-            tools=self.tools,
-            tools_info="\n".join([f"- {t['name']}: {t['description']}" for t in self.tools]),
             final_prompt=final_prompt,
         )
         self.conversation_history = conversation_history or []
+
+    EDIT_TOOL_DEFS = [SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF]
 
     def _create_tools(self):
         """
@@ -169,10 +165,14 @@ class EditAgent(BaseAgent):
                 queries = [query]
             elif queries is None:
                 return "Error: No search queries provided"
-        
 
-            results = await self.explorer.run(queries=queries, unique_id=self.unique_id, get_answer=True, max_results=5)
-            
+            results = await self.explorer.run(
+                queries=queries,
+                unique_id=self.unique_id,
+                get_answer=True,
+                max_results=5,
+            )
+
             return "\n\n---\n\n".join(str(results))
 
         return [
@@ -195,114 +195,105 @@ class EditAgent(BaseAgent):
         """
         Executes the editing agent and returns the edited document content.
 
-        This method orchestrates the entire editing workflow:
-        1. Iterates up to `max_iterations` times
-        2. Builds messages and calls the LLM for decisions
-        3. Parses the response, extracting both JSON decision and document content
-        4. Executes tools (search) if requested
-        5. Returns the final edited document when type='final'
-
-        The agent uses a special format where the document content is wrapped in
-        <<<DOC_CONTENT>>> markers to avoid JSON parsing issues with large text.
+        This method uses native tool-calling through the cloud LLM API rather than
+        embedding tool instructions inside the system prompt.
 
         Args:
             user_prompt (str): The user's editing instruction.
 
         Returns:
             str: The complete edited document content in markdown format.
-
-        Note:
-            This overrides the generator-based arun from ChatAgent/BaseAgent to return
-            a single string instead of streaming chunks.
         """
-        state = {"history": [], "tool_results": {}}
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": self.instruction}
+        ]
 
-        for iteration in range(self.max_iterations):
-            messages = self._build_messages_array(user_prompt, state)
+        # Add conversation history (last 10 messages)
+        recent_history = (
+            self.conversation_history[-10:]
+            if len(self.conversation_history) > 10
+            else self.conversation_history
+        )
+        for msg in recent_history:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role in ["user", "assistant"] and content:
+                messages.append({"role": role, "content": content})
 
-            # Call LLM (non-streaming for decision)
-            raw_output = await self._call_llm_with_messages(messages=messages, stream=False)
-            
-            # Check for DOC_CONTENT block
-            doc_content = None
-            raw_output_json = raw_output
-            
-            if "<<<DOC_CONTENT>>>" in raw_output:
-                parts = raw_output.split("<<<DOC_CONTENT>>>")
-                if len(parts) >= 2:
-                    # parts[0] is the JSON (hopefully)
-                    # parts[1] is the content
-                    raw_output_json = parts[0]
-                    doc_content = parts[1].strip()
-                    # If there's a closing tag, ignore what's after
-                    if len(parts) > 2:
-                         doc_content = parts[1].strip() # Take the middle part
-            
-            try:
-                # Cleaning the raw_output_json
-                raw_output_json = raw_output_json.strip()
+        # Provide current document content and user instruction to the model.
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "CURRENT_CONTENT:\n" + self.current_content + "\n\n"
+                    "USER_INSTRUCTION:\n" + user_prompt
+                ),
+            }
+        )
 
-                if '<｜begin of sentence｜>' in raw_output_json:
-                    raw_output_json = raw_output_json.replace('<｜begin of sentence｜>', '')
+        for _ in range(self.max_iterations):
+            stream = await cloud_llm_manager(
+                model_name=self.model,
+                provider=self.CLOUD_PROVIDER,
+                messages=messages,
+                tools=self.EDIT_TOOL_DEFS,
+            )
 
-                if '<｜end of sentence｜>' in raw_output_json:
-                    raw_output_json = raw_output_json.replace('<｜end of sentence｜>', '')
+            pending_tool_calls: List[Dict[str, Any]] = []
+            assistant_text_parts: List[str] = []
 
-                # Remove any trailing special characters
-                raw_output_json = raw_output_json.strip().rstrip('<｜').rstrip(' ')
-
-                # Extract JSON from markdown if present
-                if "```json" in raw_output_json:
-                    json_start = raw_output_json.find("```json") + 7
-                    json_end = raw_output_json.find("```", json_start)
-                    raw_output_json = raw_output_json[json_start:json_end].strip()
-                elif "```" in raw_output_json:
-                    json_start = raw_output_json.find("```") + 3
-                    json_end = raw_output_json.find("```", json_start)
-                    raw_output_json = raw_output_json[json_start:json_end].strip()
-            except:
-                pass
-                
-            # Parse decision
-            try:
-                decision = AgentDecision.model_validate_json(raw_output_json)
-            except Exception as e:
-                # Fallback parsing
+            async for raw_chunk in stream:
                 try:
-                    decision_dict = json.loads(raw_output_json)
-                    decision = AgentDecision(**decision_dict)
-                except:
-                    decision = AgentDecision(type="final", answer=raw_output_json)
-
-            # Handle decision type
-            if decision.type == "final":
-                if doc_content:
-                    return doc_content
-                elif decision.answer and decision.answer != "See below":
-                    return decision.answer
+                    event = json.loads(raw_chunk)
+                except json.JSONDecodeError:
+                    assistant_text_parts.append(raw_chunk)
+                    continue
+                
+                # TODO: We want to show thinking in fronteend also tool call and document it so we will update it in future but for now we will just ignoring it
+                event_type = event.get("type")
+                if event_type == "thinking":
+                    continue
+                elif event_type == "tool_call":
+                    pending_tool_calls.append(event)
+                elif event_type == "answer_chunk":
+                    assistant_text_parts.append(event.get("content", ""))
                 else:
-                    # Fallback if answer is missing or "See below" but no content block found
-                    return self.current_content
+                    assistant_text_parts.append(raw_chunk)
 
-            elif decision.type == "tool" and decision.tool_calls:
-                for tc in decision.tool_calls:
-                    tool = next(
-                        (t for t in self.config.tools if t.name == tc.name), None
+            if not pending_tool_calls:
+                return "".join(assistant_text_parts).strip()
+
+            # TODO: Needs to show tool calls results in frontend also we will update it in future but for now we will just execute tool calls and add results to messages for next iteration
+            for tc in pending_tool_calls:
+                tool_name = tc.get("name", "")
+                tool_args = tc.get("arguments", {})
+
+                tool_obj = next(
+                    (t for t in self.config.tools if t.name == tool_name),
+                    None,
+                )
+
+                if not tool_obj:
+                    error_str = f"Error: Tool '{tool_name}' not found"
+                    messages.append(
+                        {"role": "user", "content": f"[Tool: {tool_name}] {error_str}"}
                     )
-                    if not tool:
-                        state["tool_results"][tc.name] = f"Tool {tc.name} not found"
-                        continue
+                    continue
 
-                    try:
-                        result = await tool.execute(tc.input)
-                        state["tool_results"][tc.name] = result
-                    except Exception as e:
-                        error_msg = f"Error: {str(e)}"
-                        state["tool_results"][tc.name] = error_msg
+                try:
+                    result = await tool_obj.execute(tool_args)
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"[Tool: {tool_name} result]\n{result}",
+                        }
+                    )
+                except Exception as e:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"[Tool: {tool_name}] Error: {str(e)}",
+                        }
+                    )
 
-            # If no more information needed but not final? Should not happen if logic is correct.
-            if not decision.needs_more_info and decision.type != "final":
-                 # Force final answer generation if it gets stuck?
-                 pass
-        
-        return self.current_content # Fallback to original if failed
+        return self.current_content

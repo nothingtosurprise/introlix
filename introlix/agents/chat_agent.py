@@ -5,67 +5,43 @@ This module provides the ChatAgent class, an intelligent conversational agent wi
 internet search capabilities. The agent can:
 
 - Maintain conversation history across multiple turns
-- Use search tools to gather current information but for quick search that doesn't require comprehensive results it can use fast_search tool which uses DDGS
-- Reason about whether it needs more information
-- Stream responses back to users in real-time
-- Make decisions about tool usage vs. direct answers
+- Use search tools via native LLM tool-calling APIs (not via system prompt JSON hacking)
+- Always stream responses in real-time
+- Iterate through multiple tool-call rounds (up to max_iterations)
 
-The ChatAgent is designed for interactive chat interfaces where users ask questions
-and the agent provides informed, up-to-date answers by searching the web when needed.
+The ChatAgent passes tool definitions directly to the LLM API (AI Studio / OpenRouter),
+receives native tool-call events from the stream, executes the requested tools, then
+feeds results back into the conversation for the next iteration — all while streaming
+the final answer to the caller.
 """
 
 import json
 from datetime import datetime
-from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, AsyncGenerator
-from introlix.agents.baseclass import (
-    AgentInput,
-    BaseAgent,
-    PromptTemplate,
-    Tool,
-)
+from pydantic import BaseModel, Field
+
+from introlix.agents.baseclass import AgentInput, BaseAgent, PromptTemplate, Tool
 from introlix.agents.explorer_agent import ExplorerAgent
 from introlix.llm_config import cloud_llm_manager
-from introlix.config import CLOUD_PROVIDER
 from introlix.prompts import chat_agent_prompt
+from introlix.tools.tool_def import SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF
 from ddgs import DDGS
 
-class ToolCall(BaseModel):
-    """Structured tool call from LLM"""
+ALL_TOOL_DEFS = [SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF]
 
-    name: str
-    input: Dict[str, Any]
-
-
-class AgentDecision(BaseModel):
-    """LLM decision output"""
-
-    type: str = Field(description="Action type: 'tool', 'final', or 'continue'")
-    thought: Optional[str] = Field(default=None, description="Agent's reasoning")
-    tool_calls: Optional[List[ToolCall]] = Field(
-        default=None, description="Tools to call in parallel"
-    )
-    answer: Optional[str] = Field(
-        default=None, description="Final answer if type is 'final'"
-    )
-    needs_more_info: Optional[bool] = Field(
-        default=False, description="Whether more information is needed"
-    )
 
 class ChatAgent(BaseAgent):
     """
     An agent designed for conversational interactions with search capabilities.
 
-    This agent can:
-    1. Maintain conversation history.
-    2. Use tools (specifically search or fast_search) to gather information.
-    3. Reason about whether it needs more information or can answer directly.
-    4. Stream its response back to the user.
+    Uses native LLM tool-calling (passed via API) rather than embedding tool
+    descriptions in the system prompt. Always streams responses. Supports
+    multi-turn iteration: tool call → execute → feed result back → repeat.
 
     Attributes:
         unique_id (str): A unique identifier for the user or session.
-        tools (List[Dict]): A list of tool definitions available to the agent.
-        sys_prompt (str): The system prompt defining the agent's behavior and persona.
+        explorer (ExplorerAgent): The deep search agent used by the 'search' tool.
+        instruction (str): The system prompt (clean, no tool JSON format).
         conversation_history (List[Dict]): The history of the conversation.
     """
 
@@ -74,7 +50,7 @@ class ChatAgent(BaseAgent):
         unique_id: str,
         model: str,
         config: Optional[AgentInput] = None,
-        max_iterations=5,
+        max_iterations: int = 5,
         conversation_history: Optional[List[Dict]] = None,
     ):
         """
@@ -83,12 +59,10 @@ class ChatAgent(BaseAgent):
         Args:
             unique_id (str): Unique identifier for the session/user.
             model (str): The name of the LLM model to use.
-            config (Optional[AgentInput]): Configuration for the agent. If None, a default config
-                                           with search tools is created.
-            max_iterations (int): Maximum number of reasoning/tool-use steps. Defaults to 5.
-            conversation_history (Optional[List[Dict]]): Existing conversation history. Defaults to None.
+            config (Optional[AgentInput]): Configuration for the agent.
+            max_iterations (int): Maximum tool-call rounds. Defaults to 5.
+            conversation_history (Optional[List[Dict]]): Existing conversation history.
         """
-
         if config is None:
             config = AgentInput(
                 name="ChatAgent",
@@ -98,26 +72,22 @@ class ChatAgent(BaseAgent):
         super().__init__(model, config, max_iterations, conversation_history)
 
         self.unique_id = unique_id
-        self.tools = [{"name": "search", "description": "Search on internet."}, {"name": "fast_search", "description": "A faster search tool using DDGS."}]
-
         self.explorer = ExplorerAgent()
 
         self.instruction = chat_agent_prompt.strip().format(
-            date=datetime.now().strftime("%Y-%m-%d"), tools=self.tools, tools_info="\n".join([f"- {t['name']}: {t['description']}" for t in self.tools])
+            date=datetime.now().strftime("%Y-%m-%d"),
         )
 
-    def _create_tools(self):
+    def _create_tools(self) -> List[Tool]:
         """
-        Creates the default tools for the agent, specifically the search tool.
+        Creates callable Tool objects for internal execution.
 
         Returns:
-            List[Tool]: A list of Tool objects available to the agent.
+            List[Tool]: A list of Tool objects the agent can execute.
         """
 
         async def fast_search(queries: List[str] = None, query: str = None) -> str:
-            """Search tool that accepts both 'queries' and 'query' for flexibility - FAST VERSION USING DDGS"""
-
-            # Handle query format
+            """Fast search using DDGS."""
             if query is not None and queries is None:
                 queries = [query]
             elif queries is None:
@@ -132,9 +102,7 @@ class ChatAgent(BaseAgent):
             return "\n\n---\n\n".join(results)
 
         async def search(queries: List[str] = None, query: str = None) -> str:
-            """Search tool that accepts both 'queries' and 'query' for flexibility"""
-
-            # Handle query format
+            """Deep search using ExplorerAgent."""
             if query is not None and queries is None:
                 queries = [query]
             elif queries is None:
@@ -150,218 +118,210 @@ class ChatAgent(BaseAgent):
             return "\n\n---\n\n".join(str(results))
 
         return [
-            Tool(
-                name="search",
-                description="Search the internet for information. Use this tool when you need current data or facts you don't know. IMPORTANT: Input must be a dictionary with 'queries' key containing a list of search queries. For single searches, pass one query in the list; for multiple searches, pass multiple queries. Examples: Single search: {'queries': ['weather in Paris']} | Multiple searches: {'queries': ['GPT-5 features', 'Gemini 2.5 features']} | Always use 'queries' (plural) not 'query'.",
-                function=search,
-            ),
-            Tool(
-                name="fast_search",
-                description="A faster search tool using DDGS. Use this when you need a quick search result and can tolerate less comprehensive results. Input format is the same as 'search' tool.",
-                function=fast_search,
-            ),
+            Tool(name="search", description="Deep internet search.", function=search),
+            Tool(name="fast_search", description="Fast internet search.", function=fast_search),
         ]
 
     def _build_prompt(self, user_prompt: str, state: Dict[str, Any]) -> PromptTemplate:
-        """
-        Legacy method required by BaseAgent but not used in this implementation.
-
-        The ChatAgent uses `_build_messages_array` instead to support chat history.
-        """
+        """Legacy method required by BaseAgent — not used by ChatAgent."""
         pass
 
     async def arun(self, user_prompt: str) -> AsyncGenerator[str, None]:
         """
-        Runs the agent asynchronously, handling the reasoning loop and streaming the response.
+        Runs the agent asynchronously with native tool-calling and always-on streaming.
 
-        The process involves:
-        1. Iterating up to `max_iterations`.
-        2. Building messages and calling the LLM to get a decision (Action/Thought).
-        3. Parsing the LLM's JSON output.
-        4. Executing tools if requested.
-        5. If the agent decides it has enough info (or hits max iterations), it generates a final answer.
-        6. The final answer is streamed back to the caller.
+        Flow:
+        1. Build messages (system + conversation history + current user query).
+        2. Call LLM with tools passed via API, stream=True always.
+        3. Stream answer chunks directly to caller.
+        4. Collect any tool_call events from the stream.
+        5. Execute all requested tools.
+        6. Append tool results to messages, yield tool status events to caller.
+        7. Loop back to step 2 (up to max_iterations).
+        8. If no tool calls in an iteration, answer is already streamed — done.
 
         Args:
             user_prompt (str): The user's input query.
 
         Yields:
-            str: Chunks of the response, including thoughts, tool status, and the final answer.
+            str: JSON-encoded event strings for the frontend:
+                 - {"type": "thinking",     "content": "..."}
+                 - {"type": "tool_calls_start", "tools": [...], "count": N}
+                 - {"type": "tool_result",  "tool": "...", "content": "completed"|"error..."}
+                 - {"type": "answer_chunk", "content": "..."}
         """
-        state = {"history": [], "tool_results": {}}
+        # Build initial messages
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": self.instruction}
+        ]
+
+        # Add conversation history (last 10 messages)
+        recent_history = (
+            self.conversation_history[-10:]
+            if len(self.conversation_history) > 10
+            else self.conversation_history
+        )
+        for msg in recent_history:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role in ["user", "assistant"] and content:
+                messages.append({"role": role, "content": content})
+
+        # Add current user message
+        messages.append({"role": "user", "content": user_prompt})
 
         for _ in range(self.max_iterations):
-            messages = self._build_messages_array(user_prompt, state)
-
-            # Call LLM (non-streaming for decision)
-            raw_output = await self._call_llm_with_messages(
-                messages=messages, stream=False
+            stream = await cloud_llm_manager(
+                model_name=self.model,
+                provider=self.CLOUD_PROVIDER,
+                messages=messages,
+                tools=ALL_TOOL_DEFS,
             )
 
-            try:
-                # Cleaning the raw_output
-                raw_output = raw_output.strip()
+            # Consume stream: collect tool calls, stream answer chunks
+            pending_tool_calls: List[Dict[str, Any]] = []
+            assistant_text_parts: List[str] = []
+            thinking_text_parts: List[str] = []
 
-                if "<｜begin▁of▁sentence｜>" in raw_output:
-                    raw_output = raw_output.replace("<｜begin▁of▁sentence｜>", "")
-
-                if "<｜end▁of▁sentence｜>" in raw_output:
-                    raw_output = raw_output.replace("<｜end▁of▁sentence｜>", "")
-
-                # Remove any trailing special characters
-                raw_output = raw_output.strip().rstrip("<｜").rstrip("▁")
-
-                # Extract JSON from markdown if present
-                if "```json" in raw_output:
-                    json_start = raw_output.find("```json") + 7
-                    json_end = raw_output.find("```", json_start)
-                    raw_output = raw_output[json_start:json_end].strip()
-                elif "```" in raw_output:
-                    json_start = raw_output.find("```") + 3
-                    json_end = raw_output.find("```", json_start)
-                    raw_output = raw_output[json_start:json_end].strip()
-            except:
-                pass
-
-            # Parse decision
-            try:
-                decision = AgentDecision.model_validate_json(raw_output)
-            except Exception as e:
-                # Fallback parsing
+            async for raw_chunk in stream:
+                # raw_chunk is a JSON string from LLMState
                 try:
-                    decision_dict = json.loads(raw_output)
-                    decision = AgentDecision(**decision_dict)
-                except:
-                    decision = AgentDecision(
-                        type="final",
-                        thought="",
-                        answer=raw_output,
-                    )
+                    event = json.loads(raw_chunk)
+                except json.JSONDecodeError:
+                    # Forward as-is if not JSON
+                    yield raw_chunk + "\n"
+                    continue
 
-            # Show thought process
-            if decision.thought:
-                yield json.dumps(
-                    {"type": "thinking", "content": decision.thought}
-                ) + "\n"
+                etype = event.get("type")
 
-            # Handle decision type
-            if decision.type == "final":
-                yield json.dumps(
-                    {
-                        "type": "answer",
-                        "content": decision.answer,
-                    }
-                ) + "\n"
+                if etype == "thinking":
+                    thinking_text_parts.append(event["content"])
+                    yield json.dumps({"type": "thinking", "content": event["content"]}) + "\n"
+
+                elif etype == "tool_call":
+                    pending_tool_calls.append(event)
+
+                elif etype == "answer_chunk":
+                    assistant_text_parts.append(event["content"])
+                    yield json.dumps({"type": "answer_chunk", "content": event["content"]}) + "\n"
+
+                else:
+                    # Forward unknown event types unchanged
+                    yield raw_chunk + "\n"
+
+            # If no tool calls: answer is already streamed, we're done
+            if not pending_tool_calls:
+                # Append assistant message to messages for history consistency
+                if assistant_text_parts:
+                    messages.append({"role": "assistant", "content": "".join(assistant_text_parts)})
                 break
 
-            elif decision.type == "tool" and decision.tool_calls:
-                yield json.dumps(
+            # Notify frontend which tools are running
+            tool_names = [tc["name"] for tc in pending_tool_calls]
+            yield json.dumps({
+                "type": "tool_calls_start",
+                "tools": tool_names,
+                "count": len(tool_names),
+            }) + "\n"
+
+            # Add assistant message with tool call intent (for providers that need it)
+            assistant_content = []
+            if thinking_text_parts:
+                assistant_content.append({
+                    "type": "thought",
+                    "text": "".join(thinking_text_parts)
+                })
+
+            for tc in pending_tool_calls:
+                assistant_content.append({
+                    "type": "tool_use",
+                    "name": tc["name"],
+                    "input": tc["arguments"],
+                    "thought_signature": tc.get("thought_signature")
+                })
+
+            messages.append({
+                "role": "assistant",
+                "content": assistant_content,
+                "tool_calls": [
                     {
-                        "type": "tool_calls_start",
-                        "tools": [tc.name for tc in decision.tool_calls],
-                        "count": len(decision.tool_calls),
+                        "id": tc.get("id") or tc["name"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["name"],
+                            "arguments": json.dumps(tc["arguments"]),
+                        },
                     }
-                ) + "\n"
-                for tc in decision.tool_calls:
-                    tool = next(
-                        (t for t in self.config.tools if t.name == tc.name), None
-                    )
-                    if not tool:
-                        yield json.dumps(
-                            {
-                                "type": "error",
-                                "content": f"Tool {tc.name} not found",
-                            }
-                        ) + "\n"
-                        continue
-
-                    try:
-                        result = await tool.execute(tc.input)
-                        state["tool_results"][tc.name] = result
-                        yield json.dumps(
-                            {
-                                "type": "tool_result",
-                                "tool": tc.name,
-                                "content": "completed",
-                            }
-                        ) + "\n"
-                    except Exception as e:
-                        error_msg = f"Error: {str(e)}"
-                        state["tool_results"][tc.name] = error_msg
-                        yield json.dumps(
-                            {
-                                "type": "tool_result",
-                                "tool": tc.name,
-                                "content": error_msg,
-                            }
-                        ) + "\n"
-
-            # If no more information needed
-            if not decision.needs_more_info:
-                # Phase 3: Generate final answer with streaming
-
-                final_messages = [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful AI assistant. Provide a clear, comprehensive answer based on the search results and conversation context. In the end of answer always include source if the data is from search. If no source is given then don't give source at the end.",
-                    }
+                    for tc in pending_tool_calls
                 ]
-                # Add conversation history
-                recent_history = (
-                    self.conversation_history[-10:]
-                    if len(self.conversation_history) > 10
-                    else self.conversation_history
-                )
-                for msg in recent_history:
-                    role = msg.get("role")
-                    content = msg.get("content")
-                    if role in ["user", "assistant"] and content:
-                        final_messages.append({"role": role, "content": content})
+            })
 
-                # Add current query and tool results
-                final_prompt_parts = [f"User asked: {user_prompt}\n"]
-                final_prompt_parts.append("\nTool Results:")
-                for tool_name, result in state["tool_results"].items():
-                    final_prompt_parts.append(
-                        f"\nOutput From {tool_name} Tool: {result}"
-                    )
+            # Execute each tool
+            tool_result_messages: List[Dict[str, Any]] = []
+            for tc in pending_tool_calls:
+                tool_name = tc.get("name", "")
+                tool_args = tc.get("arguments", {})
 
-                final_prompt_parts.append(
-                    "\n\nProvide a comprehensive answer to the user's question based on these search results and conversation history."
+                tool_obj = next(
+                    (t for t in self.config.tools if t.name == tool_name), None
                 )
 
-                final_messages.append(
-                    {"role": "user", "content": "\n".join(final_prompt_parts)}
-                )
+                if not tool_obj:
+                    error_msg = f"Tool '{tool_name}' not found"
+                    yield json.dumps({
+                        "type": "tool_result",
+                        "tool": tool_name,
+                        "content": f"Error: {error_msg}",
+                    }) + "\n"
+                    tool_result_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.get("id") or tc["name"],
+                        "name": tool_name,
+                        "content": f"Error: {error_msg}",
+                    })
+                    continue
 
-                # Stream the final response
-                response_stream = await self._call_llm_with_messages(
-                    final_messages, stream=True
-                )
+                try:
+                    result = await tool_obj.execute(tool_args)
+                    result_str = str(result)
+                    yield json.dumps({
+                        "type": "tool_result",
+                        "tool": tool_name,
+                        "content": "completed",
+                    }) + "\n"
+                    tool_result_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.get("id") or tc["name"],
+                        "name": tool_name,
+                        "content": result_str,
+                    })
+                except Exception as e:
+                    error_msg = f"Error: {str(e)}"
+                    yield json.dumps({
+                        "type": "tool_result",
+                        "tool": tool_name,
+                        "content": error_msg,
+                    }) + "\n"
+                    tool_result_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.get("id") or tc["name"],
+                        "name": tool_name,
+                        "content": error_msg,
+                    })
 
-                async for chunk in response_stream:
-                    if chunk.strip().startswith('{"type":'):
-                        yield chunk + "\n"
-                    else:
-                        yield json.dumps({"type": "answer_chunk", "content": chunk}) + "\n"
+            # Add tool results to messages for the next iteration
+            messages.extend(tool_result_messages)
 
-                break
+            # Continue to next iteration — LLM will now generate answer with tool results
 
 
 async def main():
-    agent = ChatAgent(unique_id="user1", model="gemini-3.1-flash-lite")
+    agent = ChatAgent(unique_id="user2545454", model="gemini-3.1-flash-lite")
 
-    async for chunk in agent.arun("""Alice, Bob, and Carol each live in a different house on the same street: red, green, and blue.
-The person who lives in the red house owns a cat.
-Bob does not live in the green house.
-Carol owns a dog.
-The green house is to the left of the red house.
-Alice does not own a cat.
-Who lives in each house, and what pet do they own?"""):
+    async for chunk in agent.arun("Who is leader of USA use the search tool not fast search this time"):
         print(chunk, end="", flush=True)
 
 
 if __name__ == "__main__":
     import asyncio
-
     asyncio.run(main())

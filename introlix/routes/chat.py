@@ -209,7 +209,7 @@ async def chat(
     )
 
     if request.search:
-        user_prompt = f"{request.prompt}\nSearch on the internet."
+        user_prompt = f"{request.prompt}\nSearch on the internet. Using fast_search or search tool if necessary. Only use search tool if big search needs to be done, as it is slower than fast_search."
     else:
         user_prompt = request.prompt
 
@@ -220,10 +220,9 @@ async def chat(
         nonlocal assistant_content
         async for chunk in chat_agent.arun(user_prompt):
             try:
-                if json.loads(chunk).get("type") == "answer_chunk":
-                    assistant_content += json.loads(chunk).get("content", "")
-                else:
-                    assistant_content += chunk
+                event = json.loads(chunk)
+                if event.get("type") == "answer_chunk":
+                    assistant_content += event.get("content", "")
             except json.JSONDecodeError:
                 # Treat the chunk as plain text if it's not valid JSON
                 assistant_content += chunk

@@ -795,7 +795,13 @@ async def chat(
     async def stream():
         assistant_content = ""
         async for chunk in chat_agent.arun(request.prompt):
-            assistant_content += chunk
+            try:
+                event = json.loads(chunk)
+                if event.get("type") == "answer_chunk":
+                    assistant_content += event.get("content", "")
+            except json.JSONDecodeError:
+                # Treat the chunk as plain text if it's not valid JSON
+                assistant_content += chunk
             yield chunk
 
         # Spawn a localized background connection task loop to write trailing response data
