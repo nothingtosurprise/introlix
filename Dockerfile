@@ -10,6 +10,10 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential gcc git curl libpq-dev \
     && rm -rf /var/lib/apt/lists/*
+    
+# Set environment variables to force a lightweight, CPU-only build
+ENV CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_CUDA=OFF"
+ENV FORCE_CMAKE=1
 
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
