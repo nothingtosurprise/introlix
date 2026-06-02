@@ -1,0 +1,51 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install huggingface_hub
+
+      - name: Prepare and push to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO: ${{ secrets.HF_SPACE_REPO }} # format: user/space-name
+        run: |
+          set -e
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE_REPO" ]; then
+            echo "HF_TOKEN and HF_SPACE_REPO secrets must be set" >&2
+            exit 1
+          fi
+
+          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions"
+
+          # Prepare a temporary clone of the Spaces repo
+          TMPDIR=$(mktemp -d)
+          cd "$TMPDIR"
+          git init
+          git remote add origin "https://huggingface.co/spaces/${HF_SPACE_REPO}"
+
+          # Copy repository contents excluding GitHub workflow files to avoid recursion
+          rsync -a --exclude='.git' --exclude='.github' --exclude='.venv' --exclude='web' --exclude='node_modules' $GITHUB_WORKSPACE/ .
+
+          # Commit and push
+          git add -A
+          git commit -m "Deploy from GitHub Actions" || true
+          # Force push to main of the space repo using token auth
+          git push --force "https://${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO}" master:main
