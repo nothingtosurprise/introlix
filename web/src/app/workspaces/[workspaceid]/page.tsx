@@ -92,11 +92,11 @@ export default function WorkspaceDetailPage() {
         <main className="w-[80%] h-[80vh]">
             <div className="mb-4 flex items-center justify-end">
                 <ButtonGroup className="flex flex-wrap items-center gap-2">
-                    <Link href={'/deep-research'}>
+                    {/* <Link href={'/deep-research'}>
                         <Button variant="outline" className="cursor-pointer">
                             <Microscope /> Deep Research
                         </Button>
-                    </Link>
+                    </Link> */}
                     <Link href={`/workspaces/${workspaceId}/desk`}>
                         <Button variant="outline" className="cursor-pointer">
                             <File />Research Desk
@@ -110,11 +110,11 @@ export default function WorkspaceDetailPage() {
                             <MessageCircle />Chat
                         </Button>
                     </Link>
-                    <Link href={'/chat?tool=search'}>
+                    {/* <Link href={'/chat?tool=search'}>
                         <Button variant="outline" className="cursor-pointer">
                             <Search />Search
                         </Button>
-                    </Link>
+                    </Link> */}
                 </ButtonGroup>
             </div>
             <div className="flex items-center justify-center">

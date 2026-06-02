@@ -18,7 +18,6 @@ from introlix.routes.chat import chat_router
 from introlix.tools.web_crawler import get_httpx_client, get_shared_context, shutdown
 from introlix.routes.research_desk import research_desk_router
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import DESCENDING
 from contextlib import asynccontextmanager
 from introlix.state import app_state
 from introlix.config import SUPPORTED_LLMs
@@ -90,6 +89,7 @@ async def get_workspaces(
     query = (
         select(WorkspaceModel)
         .where(WorkspaceModel.user_id == current_user.id)
+        .order_by(desc(WorkspaceModel.updated_at))
         .limit(limit + 1)
         .offset(skip)
     )
@@ -149,7 +149,7 @@ async def get_all_workspace_items(
         select(subquery)
         .order_by(
             desc(subquery.c.updated_at)
-        )  # Target the column inside the subquery explicitly
+        )
         .limit(limit + 1)
         .offset(offset_value)
     )

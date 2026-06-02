@@ -166,7 +166,7 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
     <div className="w-full bg-background flex flex-col h-full shrink-0">
       {/* Chat History / Content Area */}
       {messages.length === 0 && !isStreaming ? (
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 ">
           <div className="flex flex-col items-center justify-center h-full text-center space-y-4 text-muted-foreground/50">
             <div className="p-4 bg-muted/20 rounded-full">
               <Bot className="h-8 w-8" />
@@ -258,8 +258,6 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
                   <Upload className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </div>
-
-              {/* Search and Agent buttons removed */}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

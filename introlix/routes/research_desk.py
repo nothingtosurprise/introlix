@@ -846,7 +846,7 @@ async def get_desks(
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    # 3. Handle paginated index retrieval (selecting only explicit columns needed)
+    # Handle paginated index retrieval (selecting only explicit columns needed)
     desks_query = (
         select(
             ResearchDeskModel.id,

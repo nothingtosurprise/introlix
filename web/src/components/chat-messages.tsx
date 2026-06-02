@@ -37,7 +37,7 @@ export function ChatMessages({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto scroll-smooth">
+    <div className="flex-1 overflow-y-auto scroll-smooth px-4">
       <div className="max-w-3xl mx-auto">
         {messages.map((message) => (
           <ChatMessage key={message.id} message={message} />

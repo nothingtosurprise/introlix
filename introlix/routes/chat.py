@@ -98,6 +98,13 @@ async def create_chat(
     db.add(result)
     await db.commit()
     await db.refresh(result)
+    # Update parent workspace updated_at to reflect new chat
+    await db.execute(
+        update(WorkspaceModel)
+        .where(WorkspaceModel.id == workspace_id)
+        .values(updated_at=datetime.now())
+    )
+    await db.commit()
     return {"message": "Chat created", "_id": str(result.id)}
 
 
@@ -193,10 +200,18 @@ async def chat(
         else [user_message.model_dump(mode="json")]
     )
     chat.messages = updated_messages
+    chat.updated_at = datetime.now()
     flag_modified(
         chat, "messages"
     )  # Inform SQLAlchemy that the messages field has been modified
 
+    await db.commit()
+    # bump parent workspace updated_at when user message is saved
+    await db.execute(
+        update(WorkspaceModel)
+        .where(WorkspaceModel.id == workspace_id)
+        .values(updated_at=datetime.now())
+    )
     await db.commit()
 
     # Initialize chat agent with history
@@ -252,7 +267,15 @@ async def chat(
                     if new_chat.messages
                     else [assistant_message.model_dump(mode="json")]
                 )
+                new_chat.updated_at = datetime.now()
                 flag_modified(new_chat, "messages")
+                await session.commit()
+                # bump parent workspace updated_at when assistant message saved
+                await session.execute(
+                    update(WorkspaceModel)
+                    .where(WorkspaceModel.id == workspace_id)
+                    .values(updated_at=datetime.now())
+                )
                 await session.commit()
 
     return StreamingResponse(stream(), media_type="text/plain")

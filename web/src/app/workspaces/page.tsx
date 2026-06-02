@@ -100,7 +100,7 @@ export default function WorkspacePage() {
           <Button onClick={() => setOpenNewWorkspaceWindow(true)} variant="outline" className="cursor-pointer"><Plus /> New Workspace</Button>
           <Button onClick={() => setOpenNewDeskWindow(true)} variant="outline" className="cursor-pointer"><File />Research Desk</Button>
           <div><Button onClick={() => setOpenNewChatWindow(true)} variant="outline" className="cursor-pointer"><MessageCircle />Chat</Button></div>
-          <Link href={'/chat?tool=search'}><Button variant="outline" className="cursor-pointer"><Search />Search</Button></Link>
+          {/* <Link href={'/chat?tool=search'}><Button variant="outline" className="cursor-pointer"><Search />Search</Button></Link> */}
         </ButtonGroup>
       </div>
       <div className="flex items-center justify-center">
