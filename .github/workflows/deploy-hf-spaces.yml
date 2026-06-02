@@ -39,13 +39,13 @@ jobs:
           TMPDIR=$(mktemp -d)
           cd "$TMPDIR"
           git init
-          git remote add origin "https://huggingface.co/spaces/${HF_SPACE_REPO}"
+          git branch -M main
+          git remote add origin "https://hf:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO}"
 
-          # Copy repository contents excluding GitHub workflow files to avoid recursion
-          rsync -a --exclude='.git' --exclude='.github' --exclude='.venv' --exclude='web' --exclude='node_modules' $GITHUB_WORKSPACE/ .
+          # Copy repository contents excluding workflows, frontend, and secrets
+          rsync -a --exclude='.git' --exclude='.github' --exclude='.venv' --exclude='web' --exclude='node_modules' --exclude='.env' --exclude='chroma_db' --exclude='data' --exclude='build' --exclude='*.sqlite3' $GITHUB_WORKSPACE/ .
 
           # Commit and push
           git add -A
           git commit -m "Deploy from GitHub Actions" || true
-          # Force push to main of the space repo using token auth
-          git push --force "https://${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO}" master:main
+          git push --force origin main
