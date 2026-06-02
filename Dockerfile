@@ -2,7 +2,8 @@
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    MAKEFLAGS="-j2"
 
 WORKDIR /app
 
@@ -20,11 +21,10 @@ RUN pip install --no-cache-dir --upgrade pip
 
 # Copy only backend files (explicitly avoid copying the frontend/web folder)
 COPY pyproject.toml /app/
+RUN pip install --no-cache-dir --no-build-isolation . || pip install --no-cache-dir .
+
 COPY app.py /app/
 COPY introlix /app/introlix
-
-# Install the package and its dependencies
-RUN pip install --no-cache-dir .
 
 EXPOSE 7860
 
