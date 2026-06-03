@@ -3,7 +3,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    MAKEFLAGS="-j2"
+    MAKEFLAGS="-j1"
 
 WORKDIR /app
 
@@ -12,12 +12,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential gcc git curl libpq-dev \
     && rm -rf /var/lib/apt/lists/*
     
-# Set environment variables to force a lightweight, CPU-only build
-ENV CMAKE_ARGS="-DGGML_BLAS=OFF -DGGML_CUDA=OFF"
-ENV FORCE_CMAKE=1
+# Reduce build parallelism and allow wheels when available
+ENV MAKEFLAGS="-j1"
 
-# Upgrade pip
-RUN pip install --no-cache-dir --upgrade pip
+# Upgrade pip and packaging tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Copy only backend files (explicitly avoid copying the frontend/web folder)
 COPY pyproject.toml /app/
