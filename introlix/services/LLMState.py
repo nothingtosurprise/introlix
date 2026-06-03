@@ -28,11 +28,13 @@ import gc
 import json
 import httpx
 from fastapi import HTTPException
-from llama_cpp import Llama
-from typing import Optional, AsyncGenerator, Union, List, Dict, Any
+from typing import Optional, AsyncGenerator, Union, List, Dict, Any, TYPE_CHECKING
 from google import genai
 from google.genai import types
 from introlix.config import MODEL_SAVE_DIR, OPEN_ROUTER_KEY, GEMINI_API_KEY
+
+if TYPE_CHECKING:
+    from llama_cpp import Llama
 
 
 class LLMState:
@@ -55,7 +57,7 @@ class LLMState:
         """
         Initialize the LLM state manager.
         """
-        self.llm: Optional[Llama] = None
+        self.llm: Optional["Llama"] = None
         self.current_model_name: Optional[str] = None
         self.lock = asyncio.Lock()
 
@@ -100,6 +102,14 @@ class LLMState:
                     import torch
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
+
+            try:
+                from llama_cpp import Llama
+            except ImportError:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Local llama.cpp support is unavailable in this deployment."
+                )
 
             try:
                 self.llm = Llama(
