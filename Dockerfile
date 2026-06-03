@@ -20,7 +20,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Copy only backend files (explicitly avoid copying the frontend/web folder)
 COPY pyproject.toml /app/
-RUN pip install --no-cache-dir --no-build-isolation . || pip install --no-cache-dir .
+RUN pip install --no-cache-dir --only-binary=:all: \
+    torch llama-cpp-python sentence-transformers chromadb playwright \
+    && pip install --no-cache-dir .
 
 COPY app.py /app/
 COPY introlix /app/introlix
