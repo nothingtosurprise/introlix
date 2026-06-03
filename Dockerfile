@@ -20,9 +20,11 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Copy only backend files (explicitly avoid copying the frontend/web folder)
 COPY pyproject.toml /app/
-RUN pip install --no-cache-dir --only-binary=:all: \
-    torch sentence-transformers chromadb playwright \
-    && pip install --no-cache-dir llama-cpp-python \
+# Remove local-only llama-cpp-python from pyproject during the HF build
+# so the build installs dependencies from pyproject.toml but ignores
+# the local-only `llama-cpp-python` dependency.
+RUN sed '/llama-cpp-python/d' pyproject.toml > pyproject.tmp \
+    && mv pyproject.tmp pyproject.toml \
     && pip install --no-cache-dir .
 
 COPY app.py /app/
