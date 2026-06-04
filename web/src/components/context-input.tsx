@@ -111,7 +111,7 @@ export default function ContextInput({ onSubmit, disabled = false }: ChatInputPr
             placeholder="How can I help you today?"
             disabled={disabled}
             rows={1}
-            className="w-full min-h-[24px] max-h-[200px] resize-none border-0 bg-transparent p-0 text-base focus:outline-none placeholder:text-muted-foreground overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full min-h-6 max-h-50 resize-none border-0 bg-transparent p-0 text-base focus:outline-none placeholder:text-muted-foreground overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
 
@@ -123,7 +123,7 @@ export default function ContextInput({ onSubmit, disabled = false }: ChatInputPr
                 className="flex items-center gap-1 text-sm bg-secondary px-2 py-1 rounded-md"
               >
                 <FileText className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate max-w-[120px]">{file.name}</span>
+                <span className="truncate max-w-30">{file.name}</span>
                 <button onClick={() => removeFile(index)} disabled={disabled}>
                   <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
                 </button>

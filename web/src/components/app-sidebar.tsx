@@ -1,5 +1,5 @@
 "use client"
-import { ChevronsUpDown, FolderOpen, HelpCircle, LogOut, Moon, Settings, Sparkles, Sun } from "lucide-react";
+import { Bot, ChevronsUpDown, FolderOpen, HelpCircle, LogOut, Moon, Settings, Sparkles, Sun } from "lucide-react";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "./ui/sidebar";
 import Link from "next/link";
 import Image from "next/image";
@@ -64,7 +64,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <Link href={'/'}>
                         <SidebarMenuButton className="cursor-pointer" tooltip="">
-                            <Image src={'./vercel.svg'} alt="" width={20} height={20} />
+                            <Bot className="size-6!" />
                             <span className="text-lg font-bold">Introlix</span>
                         </SidebarMenuButton>
                     </Link>

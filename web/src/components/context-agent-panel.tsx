@@ -50,14 +50,11 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { useSetupContextAgent } from "@/hooks/use-desk";
 import { ResearchDesk } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useModelsList } from "@/hooks/use-chat";
 
-const MODELS = [
-  { label: "Auto Selection", value: "auto", icon: Sparkles },
-  { label: "GPT-5", value: "gpt-5", icon: Bot },
-  { label: "Claude Sonnet 4", value: "claude-sonnet-4", icon: Bot },
-  { label: "Deepseek V3.2", value: "deepseek/deepseek-v3.2-exp", icon: BrainCircuit },
-  { label: "Gemini 2.5 Pro", value: "google/gemini-2.5-pro", icon: Bot },
-] as const;
+const MODEL_DISPLAY: Record<string, string> = {
+  "auto": "Auto",
+};
 
 const SCOPES = [
   { label: "Narrow Focus", value: "narrow" },
@@ -92,6 +89,16 @@ export default function ContextAgentPanel({
     ["narrow", "medium", "comprehensive"].includes(researchScope) ? researchScope : "medium"
   );
   const [model, setModel] = useState(initialModel || "auto");
+
+  const models_list = useModelsList();
+
+  const models: string[] = ["auto", ...(models_list.data?.map((m) => m.value) ?? [])];
+  // adding models name inside MODEL_DISPLAY if not already present
+  models_list.data?.forEach((model) => {
+    if (!MODEL_DISPLAY[model.value]) {
+      MODEL_DISPLAY[model.value] = model.name;
+    }
+  });
 
   const setupContextAgent = useSetupContextAgent();
 
@@ -168,41 +175,41 @@ export default function ContextAgentPanel({
     <div className="flex h-screen w-full flex-col bg-background text-foreground">
       {/* --- Header --- */}
       <header className="sticky top-4 z-10 flex items-center justify-between border bg-accent/20 backdrop-blur-lg px-6 py-3 mx-4 mt-4 rounded-full">
-        <motion.div 
+        <motion.div
           className="flex items-center gap-3 relative"
           animate={{ y: [0, -1.5, 0] }}
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         >
           <motion.div
             initial={{ x: 0, scaleX: 1, scaleY: 1, rotate: 0 }}
-            animate={{ 
+            animate={{
               x: [0, 8, -10, 4, 0],
               scaleX: [1, 1.25, 0.85, 1.05, 1],
               scaleY: [1, 0.75, 1.15, 0.95, 1],
               rotate: [0, 6, -6, 2, 0]
             }}
-            transition={{ 
-              duration: 1.4, 
-              times: [0, 0.5, 0.7, 0.85, 1], 
-              ease: ["easeIn", "easeOut", "easeInOut", "easeInOut"] 
+            transition={{
+              duration: 1.4,
+              times: [0, 0.5, 0.7, 0.85, 1],
+              ease: ["easeIn", "easeOut", "easeInOut", "easeInOut"]
             }}
             style={{ transformOrigin: "right center", zIndex: 10 }}
           >
             <Bot size={30} className="" />
           </motion.div>
-          <motion.div 
+          <motion.div
             className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider"
             initial={{ x: -40, opacity: 0, scaleX: 0.5, scaleY: 0.8 }}
-            animate={{ 
-              x: [-40, -18, 30, -8, 0], 
+            animate={{
+              x: [-40, -18, 30, -8, 0],
               opacity: [0, 1, 1, 1, 1],
               scaleX: [0.8, 1.4, 0.85, 1.05, 1],
               scaleY: [0.8, 0.65, 1.15, 0.95, 1]
             }}
-            transition={{ 
-              duration: 1.4, 
-              times: [0, 0.5, 0.7, 0.85, 1], 
-              ease: ["easeIn", "easeOut", "easeInOut", "easeInOut"] 
+            transition={{
+              duration: 1.4,
+              times: [0, 0.5, 0.7, 0.85, 1],
+              ease: ["easeIn", "easeOut", "easeInOut", "easeInOut"]
             }}
             style={{ transformOrigin: "left center", zIndex: 5 }}
           >
@@ -227,18 +234,18 @@ export default function ContextAgentPanel({
 
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-sm shadow-sm transition-all",
-            contextAgent?.move_next 
-              ? "bg-emerald-500/10 border-emerald-500/20" 
+            contextAgent?.move_next
+              ? "bg-emerald-500/10 border-emerald-500/20"
               : ""
           )}>
             {contextAgent?.move_next ? (
               <>
-                <CheckCircle2 className="h-4 w-4" /> 
+                <CheckCircle2 className="h-4 w-4" />
                 <span className="text-[11px] font-bold uppercase tracking-wider">Ready</span>
               </>
             ) : (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" /> 
+                <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-[11px] font-bold uppercase tracking-wider">Gathering</span>
               </>
             )}
@@ -247,10 +254,10 @@ export default function ContextAgentPanel({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={handleRetry} 
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleRetry}
                   className="rounded-full h-8 w-8 hover:bg-accent hover:text-foreground text-muted-foreground transition-all cursor-pointer"
                 >
                   <RefreshCcw className="h-4 w-4" />
@@ -357,11 +364,11 @@ export default function ContextAgentPanel({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="start">
-                    {MODELS.map((m) => (
-                      <SelectItem key={m.value} value={m.value} className="text-xs">
+                    {Object.entries(MODEL_DISPLAY).map(([value, label]) => (
+                      <SelectItem key={value} value={value} className="text-xs">
                         <div className="flex items-center gap-2">
-                          <m.icon className="h-3 w-3" />
-                          {m.label}
+                          <Bot className="h-3 w-3" />
+                          {label}
                         </div>
                       </SelectItem>
                     ))}

@@ -31,13 +31,6 @@ const MODEL_DISPLAY: Record<string, string> = {
   "auto": "Auto",
 };
 
-const AGENT_DISPLAY: Record<Exclude<AgentType, null>, string> = {
-  "verifier": "Verifier",
-  "knowledge-gap": "Knowledge Gap",
-  "research-assistant": "Research Assistant",
-  "code-reviewer": "Code Reviewer",
-};
-
 export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [isComposing, setIsComposing] = useState(false);
@@ -55,14 +48,7 @@ export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps
     if(!MODEL_DISPLAY[model.value]) {
       MODEL_DISPLAY[model.value] = model.name;
     }
-  })
-
-  const agents: Exclude<AgentType, null>[] = [
-    "verifier",
-    "knowledge-gap",
-    "research-assistant",
-    "code-reviewer",
-  ];
+  });
 
   useEffect(() => {
     const textarea = textareaRef.current;
