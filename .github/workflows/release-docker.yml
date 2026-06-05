@@ -1,0 +1,100 @@
+name: Build and Release Local Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag Name'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  release:
+    name: Build, Package and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Release Tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+          else
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase Repository Name for GHCR
+        id: repo_names
+        run: |
+          echo "IMAGE_NAME=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Build Docker Image (Local Tagging)
+        run: |
+          docker build -f Dockerfile.local -t introlix:latest -t introlix:${{ env.TAG_NAME }} .
+
+      - name: Save Docker Image to Tarball
+        run: |
+          echo "Packaging Docker image into compressed tarball..."
+          docker save introlix:latest | gzip > introlix-local-${{ env.TAG_NAME }}.tar.gz
+          echo "Docker image packaged successfully: introlix-local-${{ env.TAG_NAME }}.tar.gz"
+
+      - name: Tag and Push Docker Image to GHCR
+        run: |
+          docker tag introlix:latest ${{ env.IMAGE_NAME }}:latest
+          docker tag introlix:latest ${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+          docker push ${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.IMAGE_NAME }}:${{ env.TAG_NAME }}
+
+      - name: Upload Tarball to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: Release ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false
+          files: introlix-local-${{ env.TAG_NAME }}.tar.gz
+          body: |
+            ## Introlix Local Docker Release
+            
+            This release contains the packaged Docker image for running Introlix locally with both frontend and backend integrated.
+            
+            ### How to Use the Released Image Tarball:
+            1. Download the `introlix-local-${{ env.TAG_NAME }}.tar.gz` asset.
+            2. Load the image into your local Docker daemon:
+               ```bash
+               docker load -i introlix-local-${{ env.TAG_NAME }}.tar.gz
+               ```
+            3. Run the container:
+               ```bash
+               docker run -d -p 8042:8042 -p 8043:8043 introlix:latest
+               ```
+            4. Open your browser and navigate to:
+               - Frontend: `http://localhost:8043`
+               - Backend API Docs: `http://localhost:8042/docs`
+
+            ### How to pull from GitHub Container Registry (GHCR):
+            Alternatively, you can pull the image directly:
+            ```bash
+            docker pull ${{ env.IMAGE_NAME }}:latest
+            docker run -d -p 8042:8042 -p 8043:8043 ${{ env.IMAGE_NAME }}:latest
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,8 +1,8 @@
 import { getAuthToken } from "@/app/action";
 import { Workspace, PaginatedResponse, Chat, CreateChatRequest, SendMessageRequest, WorkspaceItem, ResearchDesk, CreateResearchDeskRequest, ResearchDeskContextAgentRequest, ContextAgentStep, ModelListResponse } from "./types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_KEY = process.env.NEXT_PUBLIC_INTROLIX_API_KEY;
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8042";
+const API_KEY = process.env.NEXT_PUBLIC_INTROLIX_API_KEY || "local_api_key123";
 
 type WorkspaceItemDeleteRequest = {
   workspaceId: string;

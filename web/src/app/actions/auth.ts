@@ -2,8 +2,8 @@
 
 import { cookies } from 'next/headers';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const API_KEY = process.env.NEXT_PUBLIC_INTROLIX_API_KEY;
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8042';
+const API_KEY = process.env.NEXT_PUBLIC_INTROLIX_API_KEY || 'local_api_key123';
 
 export async function loginAction(email: string, password: string) {
   const url = new URL(`${BASE_URL}/auth/login`);

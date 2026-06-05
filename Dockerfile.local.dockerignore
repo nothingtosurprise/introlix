@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.venv/
+venv/
+build/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+chroma_db/
+data/
+.git/
+*.sqlite3

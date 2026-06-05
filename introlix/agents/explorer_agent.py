@@ -39,7 +39,7 @@ Notes:
 - Processes queries in batches of 5 to avoid search tool timeouts
 - Implements semantic similarity filtering to store only relevant chunks
 - Automatically retries queries that don't find sufficient data
-- Embedding model: google/embeddinggemma-300m or all-MiniLM-L6-v2
+- Embedding model: all-MiniLM-L6-v2
 """
 
 import asyncio
@@ -242,33 +242,38 @@ class ExplorerAgent:
             )
 
         async def process_query(query: str):
-            task_duckduckgo = asyncio.create_task(
-                asyncio.to_thread(duckduckgo_search, query, self.max_results)
-            )
-            task_search_tool = asyncio.create_task(
-                self.search_tool.search(query=query, max_results=self.max_results)
-            )
+            if not self.search_tool.host:
+                search_results = await asyncio.to_thread(
+                    duckduckgo_search, query, self.max_results
+                )
+            else:
+                task_duckduckgo = asyncio.create_task(
+                    asyncio.to_thread(duckduckgo_search, query, self.max_results)
+                )
+                task_search_tool = asyncio.create_task(
+                    self.search_tool.search(query=query, max_results=self.max_results)
+                )
 
-            # Get the first completed search results (either from duckduckgo or the search tool)
-            done, pending = await asyncio.wait(
-                {task_duckduckgo, task_search_tool}, return_when=asyncio.FIRST_COMPLETED
-            )
+                # Get the first completed search results (either from duckduckgo or the search tool)
+                done, pending = await asyncio.wait(
+                    {task_duckduckgo, task_search_tool}, return_when=asyncio.FIRST_COMPLETED
+                )
 
-            try:
-                search_results = done.pop().result()
+                try:
+                    search_results = done.pop().result()
 
-                # Cancel the slower search task to save resources
-                for task in pending:
-                    task.cancel()
-            except Exception as e:
-                if pending:
-                    fallback_task = pending.pop()
-                    try:
-                        search_results = await fallback_task
-                    except Exception as fallback_error:
+                    # Cancel the slower search task to save resources
+                    for task in pending:
+                        task.cancel()
+                except Exception as e:
+                    if pending:
+                        fallback_task = pending.pop()
+                        try:
+                            search_results = await fallback_task
+                        except Exception as fallback_error:
+                            search_results = []
+                    else:
                         search_results = []
-                else:
-                    search_results = []
 
             crawl_tasks = []
 

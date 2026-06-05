@@ -9,9 +9,9 @@ load_dotenv()
 # KEYS
 OPEN_ROUTER_KEY = os.environ.get("OPEN_ROUTER_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-SEARCHXNG_HOST = os.environ["SEARCHXNG_HOST"]
-INTROLIX_API_KEY = os.environ["INTROLIX_API_KEY"]
-JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
+SEARCHXNG_HOST = os.environ.get("SEARCHXNG_HOST", "")
+INTROLIX_API_KEY = os.environ.get("INTROLIX_API_KEY", "local_api_key123")
+JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "local_api_key123")
 
 # App Info
 APP_NAME = "introlix"

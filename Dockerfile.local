@@ -1,0 +1,58 @@
+# Backend & Frontend Local Build Dockerfile
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MAKEFLAGS="-j1"
+
+WORKDIR /app
+
+# Install system dependencies (curl, git, compile dependencies and playwright/browser dependencies)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential gcc git curl libpq-dev \
+        libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libx11-xcb1 libxcb1 \
+        libxcomposite1 libxrandr2 libxdamage1 libxfixes3 libxrender1 \
+        libxkbcommon0 libgbm1 libpango-1.0-0 libpangocairo-1.0-0 libasound2 \
+        libxss1 libxtst6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20 and pnpm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g pnpm
+
+# Upgrade pip and packaging tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Copy backend dependencies
+COPY pyproject.toml /app/
+RUN sed '/llama-cpp-python/d' pyproject.toml > pyproject.tmp \
+    && mv pyproject.tmp pyproject.toml \
+    && pip install --no-cache-dir . \
+    && python -m playwright install chromium
+
+# Copy frontend dependency locks and install frontend dependencies
+COPY web/package.json web/pnpm-lock.yaml* web/package-lock.json* /app/web/
+WORKDIR /app/web
+RUN pnpm install --frozen-lockfile || pnpm install
+
+# Copy all repository files (including .env if they exist, which are not ignored by Dockerfile.local.dockerignore)
+WORKDIR /app
+COPY . /app
+
+# Build the frontend next.js website
+WORKDIR /app/web
+RUN pnpm build
+
+# Go back to /app
+WORKDIR /app
+
+# Make the startup script executable
+RUN chmod +x /app/start.sh
+
+# Expose ports for backend (8042) and frontend (8043)
+EXPOSE 8042 8043
+
+# Start backend and frontend
+CMD ["/app/start.sh"]

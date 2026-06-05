@@ -179,7 +179,12 @@ class SearXNGClient:
         >>> results = await client.search("Python programming")
     """
 
-    def __init__(self, model: str, min_delay_between_requests: float = 5.0):
+    def __init__(
+        self,
+        model: str,
+        min_delay_between_requests: float = 5.0,
+        host: Optional[str] = None,
+    ):
         """
         Initialize the SearXNG search client.
 
@@ -187,8 +192,10 @@ class SearXNGClient:
             model (str): LLM model identifier for result filtering.
             min_delay_between_requests (float): Minimum seconds between search requests.
                                                 Defaults to 5.0 to prevent rate limiting.
+            host (Optional[str]): Optional SearXNG instance URL. If not provided,
+                                  the client will not perform SearXNG searches.
         """
-        self.host = SEARCHXNG_HOST
+        self.host = (host or SEARCHXNG_HOST or "").strip()
         self.model = model
 
         # Request throttling configuration
@@ -196,12 +203,13 @@ class SearXNGClient:
         self.last_request_time = 0
         self._lock = asyncio.Lock()  # Prevent concurrent requests
 
-        if not self.host.endswith("/search"):
-            self.host = (
-                f"{self.host}/search"
-                if not self.host.endswith("/")
-                else f"{self.host}search"
-            )
+        if self.host:
+            if not self.host.endswith("/search"):
+                self.host = (
+                    f"{self.host}/search"
+                    if not self.host.endswith("/")
+                    else f"{self.host}search"
+                )
 
         self.config = AgentInput(
             name="FilterAgent",
@@ -263,6 +271,12 @@ class SearXNGClient:
             - Automatically throttles requests based on min_delay
             - Returns empty list after max_retries failures
         """
+
+        if not self.host:
+            logger.warning(
+                "No SEARCHXNG_HOST configured; skipping SearXNG search and returning no results."
+            )
+            return []
 
         for attempt in range(max_retries):
             try:

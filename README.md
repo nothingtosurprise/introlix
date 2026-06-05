@@ -116,7 +116,7 @@ OPEN_ROUTER_KEY=your_openrouter_api_key_here
 # OR
 GEMINI_API_KEY=your_gemini_api_key_here # From Google AI Studio
 
-# Required: Search engine
+# Optional: Search engine
 SEARCHXNG_HOST=http://localhost:8080/search
 
 # Required: API key & JWT secret key
