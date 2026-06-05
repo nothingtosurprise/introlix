@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  introlix:
+    image: ghcr.io/introlix/introlix-app:latest
+    container_name: introlix-app
+    ports:
+      - "8042:8042"
+      - "8043:8043"
+    env_file:
+      - .env
+    restart: unless-stopped

@@ -176,6 +176,31 @@ pnpm dev
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
+
+### 🐳 Running with Docker & Docker Compose (Integrated Local Run)
+
+For running the entire application (both Next.js frontend and FastAPI backend) in a single integrated container:
+
+1. **Build the local Docker image**:
+   ```bash
+   docker build -f Dockerfile.local -t introlix:local .
+   ```
+
+2. **Run using Docker Compose**:
+   Ensure you have your `.env` file containing your API keys (e.g. `GEMINI_API_KEY`, etc.) in the root folder, then start the container:
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Access the application**:
+   - Frontend: [http://localhost:8043](http://localhost:8043)
+   - Backend API Docs: [http://localhost:8042/docs](http://localhost:8042/docs)
+
+To stop the container, run:
+```bash
+docker compose down
+```
+
 ---
 
 ## 🔧 Configuration

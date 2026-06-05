@@ -76,25 +76,43 @@ jobs:
             
             This release contains the packaged Docker image for running Introlix locally with both frontend and backend integrated.
             
-            ### How to Use the Released Image Tarball:
-            1. Download the `introlix-local-${{ env.TAG_NAME }}.tar.gz` asset.
+            ### Run with Docker Compose (Recommended)
+            
+            1. Create a `docker-compose.yml` file:
+               ```yaml
+               version: '3.8'
+               services:
+                 introlix:
+                   image: ${{ env.IMAGE_NAME }}:latest
+                   container_name: introlix-app
+                   ports:
+                     - "8042:8042"
+                     - "8043:8043"
+                   env_file:
+                     - .env
+                   restart: unless-stopped
+               ```
+            
+            2. Place your local `.env` configuration file in the same directory.
+            3. Run the container:
+               ```bash
+               docker compose up -d
+               ```
+
+            ### 📦 How to Use the Downloaded Image Tarball:
+            1. Download the `introlix-local-${{ env.TAG_NAME }}.tar.gz` asset from this release.
             2. Load the image into your local Docker daemon:
                ```bash
                docker load -i introlix-local-${{ env.TAG_NAME }}.tar.gz
                ```
-            3. Run the container:
+            3. Create a `docker-compose.yml` as above, but replace the `image` field with `introlix:latest`.
+            4. Run it:
                ```bash
-               docker run -d -p 8042:8042 -p 8043:8043 introlix:latest
+               docker compose up -d
                ```
-            4. Open your browser and navigate to:
-               - Frontend: `http://localhost:8043`
-               - Backend API Docs: `http://localhost:8042/docs`
-
-            ### How to pull from GitHub Container Registry (GHCR):
-            Alternatively, you can pull the image directly:
-            ```bash
-            docker pull ${{ env.IMAGE_NAME }}:latest
-            docker run -d -p 8042:8042 -p 8043:8043 ${{ env.IMAGE_NAME }}:latest
-            ```
+               
+            ### Accessing the Application:
+            - **Frontend UI**: `http://localhost:8043`
+            - **Backend API Docs**: `http://localhost:8042/docs`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
