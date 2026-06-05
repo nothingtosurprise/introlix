@@ -19,8 +19,8 @@ pinned: false
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Next.js](https://img.shields.io/badge/Next.js-15.5-black)](https://nextjs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.116+-green.svg)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2-black)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.136+-green.svg)](https://fastapi.tiangolo.com/)
 
 [Features](#features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Contributing](#contributing)
 
@@ -41,7 +41,7 @@ Introlix is an intelligent research platform that combines the power of AI agent
 - **AI Document Editor**: Edit and enhance your research documents with AI assistance
 - **Advanced Search Integration**: Powered by SearXNG for privacy-focused web searches
 - **Knowledge Management**: Vector-based storage with Pinecone for semantic search
-- **Multi-Agent System**: Specialized agents for different research tasks (Context, Planner, Explorer, Editor, Writer)
+- **Multi-Agent System**: Specialized agents for different research tasks (Context, Planner, Explorer, Editor)
 
 ---
 <div id="features"></div>
@@ -87,10 +87,10 @@ The Research Desk guides you through a comprehensive research process:
 ### Prerequisites
 
 - **Python**: 3.11 or higher
-- **Node.js**: 18 or higher
+- **Node.js**: 22 or higher
 - **pnpm**: Package manager for frontend
 - **SQLite**: Database for storing workspaces and research data
-- **Pinecone**: Vector database for semantic search
+- **Chromadb**: Vector database for semantic search
 - **SearXNG**: Self-hosted search engine (see [SearXNG Setup](#searxng-setup))
 
 ### Installation
@@ -119,8 +119,9 @@ GEMINI_API_KEY=your_gemini_api_key_here # From Google AI Studio
 # Required: Search engine
 SEARCHXNG_HOST=http://localhost:8080/search
 
-# Required: Vector database
-PINECONE_KEY=your_pinecone_api_key_here
+# Required: API key & JWT secret key
+INTROLIX_API_KEY=123456
+JWT_SECRET_KEY = my_secret
 ```
 
 3. **Install Python dependencies**
@@ -239,18 +240,6 @@ You should receive a JSON response with search results.
 
 ---
 
-<div id="documentation"></div>
-
-## 📚 Documentation
-
-- [API Documentation](./docs/API.md) - REST API reference
-- [Architecture](./docs/ARCHITECTURE.md) - System design and components
-- [Development Guide](./docs/DEVELOPMENT.md) - Contributing and development setup
-- [SearXNG Setup](#searxng-setup) - Detailed search engine configuration
-- [Quick Reference](./docs/QUICK_REFERENCE.md) - Common commands and tips
-
----
-
 ## 🏗️ Architecture
 
 Introlix is built with a modern, scalable architecture:
@@ -264,13 +253,12 @@ Introlix is built with a modern, scalable architecture:
   - `PlannerAgent`: Creates structured research plans
   - `ExplorerAgent`: Searches and gathers information
   - `EditAgent`: AI-assisted document editing
-  - `WriterAgent`: Content generation and synthesis
-- **Vector Storage**: Pinecone for semantic search
+- **Vector Storage**: Chromadb for semantic search
 - **Database**: SQLite for data persistence
 
 ### Frontend (Next.js/React)
 
-- **Next.js 15**: React framework with App Router
+- **Next.js**: React framework with App Router
 - **Lexical**: Rich text editor
 - **TanStack Query**: Data fetching and caching
 - **Radix UI**: Accessible component primitives
@@ -280,21 +268,8 @@ Introlix is built with a modern, scalable architecture:
 
 - **LLM Providers**: OpenRouter or Google AI Studio
 - **Search**: SearXNG (self-hosted)
-- **Vector DB**: Pinecone
+- **Vector DB**: Chromadb
 - **Database**: SQLite
-
----
-
-<div id="contributing"></div>
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](./docs/CONTRIBUTING.md) for details on:
-
-- Setting up your development environment
-- Code style and standards
-- Submitting pull requests
-- Reporting bugs and requesting features
 
 ---
 
@@ -310,7 +285,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 - Frontend powered by [Next.js](https://nextjs.org/)
 - Rich text editing with [Lexical](https://lexical.dev/)
 - Search powered by [SearXNG](https://github.com/searxng/searxng)
-- Vector storage by [Pinecone](https://www.pinecone.io/)
+- Vector storage by [Chromadb](https://www.trychroma.com/)
 
 ---
 

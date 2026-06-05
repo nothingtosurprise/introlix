@@ -4,7 +4,6 @@ from sqlalchemy import select, literal_column, desc, delete
 from introlix.database import get_db, init_db
 from introlix.utils.auth import get_current_user
 from introlix.routes.auth import router as auth_router
-from introlix.config import PINECONE_KEY
 from fastapi import FastAPI, HTTPException, Query, Depends
 from introlix.models import (
     Workspace,
