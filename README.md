@@ -32,7 +32,7 @@ pinned: false
 
 Introlix is an intelligent research platform that combines the power of AI agents with advanced search capabilities to streamline your research workflow. Whether you're conducting academic research, market analysis, or deep investigations, Introlix provides a comprehensive suite of tools to help you gather, organize, and synthesize information efficiently.
 
-[![Watch the Demo](https://img.youtube.com/vi/_eh-9plL_V8/0.jpg)](https://youtu.be/_eh-9plL_V8?si=xbMtzkFhhN-GBCDL)
+[![Watch the Demo](https://img.youtube.com/vi/8ZGjbblA27M/0.jpg)](https://youtu.be/8ZGjbblA27M?si=g-HfaEyrkdyr9F1c)
 
 ### Key Capabilities
 
