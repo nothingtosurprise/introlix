@@ -30,9 +30,11 @@ pinned: false
 
 ## 🌟 Overview
 
-Introlix is an intelligent research platform (yet) that combines the power of AI agents with advanced search capabilities to streamline your research workflow. Whether you're conducting academic research, market analysis, or deep investigations, Introlix provides a comprehensive suite of tools to help you gather, organize, and synthesize information efficiently.
+Introlix is an intelligent research platform that combines the power of AI agents with advanced search capabilities to streamline your research workflow. Whether you're conducting academic research, market analysis, or deep investigations, Introlix provides a comprehensive suite of tools to help you gather, organize, and synthesize information efficiently.
 
-[![Watch the Demo](https://img.youtube.com/vi/KK5Ngpkr846RpauB/0.jpg)](https://youtu.be/DMKt0WGUNeQ?si=0MUMtX9R5rBUIayv)
+[![Watch the Demo](https://img.youtube.com/vi/DMKt0WGUNeQ/0.jpg)](https://youtu.be/DMKt0WGUNeQ?si=0MUMtX9R5rBUIayv)
+
+**Note**: Currently this platform is AI powered research platform. Our goal is to convert this project from research platform to a tool platform that provides AI powered tools in user computer without taking users data. See <a href="#roadmap">roadmap</a> section for more details. 
 
 ### Key Capabilities
 
@@ -78,12 +80,31 @@ The Research Desk guides you through a comprehensive research process:
 - **Audio Processor**: Process audio to enhance it and remove stutters from audio with all local models.
 - **Document Formatting**: Export research as blog posts, research papers, or custom formats.
 - **Reference Management**: Automatic citation generation with inline references [1], [2], etc.
+- **File Upload**: Currently we can't upload files that will be added soon.
 
+---
+<div id="roadmap"></div>
+
+### Roadmap (Future Plan)
+- **Our goal is to convert this project from research platform to a tool platform that provides AI powered tools in user computer without taking users data**
+
+- **Note**: When we mean AI does not mean LLM or text generator models only. We mean machine learning model that could be both traditional ML models or deep learning models.
+
+1. **Add Basic Features**: We don't have basic features like file upload and image upload and many other basic features that we need.
+
+2. **Audio Process Tool**: We also wants to put audio processing tools that able to filter audio, remove sutters and noises from the audio.
+
+3. **Add All Coming Soon Features**: We have multiple features in coming soon. Our goal is to make these posible before v1.
+
+4. **Don't Give Everyone All Features**: Everyone don't want to use every tools. Many are unrelated to each other. So, Before v1 we will make sure that users can select which feature to use.
+
+5. **Desktop Applicaton**: Before v1 we want a desktop app for this platform.
 ---
 
 <div id="quick-start"></div>
 
 ## 🚀 Quick Start
+- **Note**: If you want to use it via docker then go and see release section
 
 ### Prerequisites
 
