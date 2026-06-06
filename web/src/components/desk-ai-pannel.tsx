@@ -254,6 +254,7 @@ export const DeskAIPannel = ({ workspaceId, deskId, messages }: DeskAIPannelProp
                   onClick={() => fileInputRef.current?.click()}
                   className="cursor-pointer h-8 w-8 rounded-lg transition-colors hover:bg-muted"
                   title="Attach files"
+                  disabled={true}
                 >
                   <Upload className="h-4 w-4 text-muted-foreground" />
                 </Button>

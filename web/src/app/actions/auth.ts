@@ -19,7 +19,19 @@ export async function loginAction(email: string, password: string) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Login failed: ${res.status} ${text}`);
+    let errorDetail = `Login failed: ${res.status}`;
+    try {
+      const errorData = JSON.parse(text);
+      if (errorData.detail) {
+        errorDetail = errorData.detail;
+      }
+    } catch {
+      // JSON parsing failed, use raw text if available
+      if (text) {
+        errorDetail = text;
+      }
+    }
+    throw new Error(errorDetail);
   }
 
   const data = await res.json();
@@ -55,7 +67,19 @@ export async function signupAction(name: string, email: string, password: string
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Signup failed: ${res.status} ${text}`);
+    let errorDetail = `Signup failed: ${res.status}`;
+    try {
+      const errorData = JSON.parse(text);
+      if (errorData.detail) {
+        errorDetail = errorData.detail;
+      }
+    } catch {
+      // JSON parsing failed, use raw text if available
+      if (text) {
+        errorDetail = text;
+      }
+    }
+    throw new Error(errorDetail);
   }
 
   const data = await res.json();

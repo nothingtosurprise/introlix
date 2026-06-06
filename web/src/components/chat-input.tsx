@@ -143,7 +143,7 @@ export default function ChatInput({ onSubmit, disabled = false }: ChatInputProps
                 variant="outline"
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={disabled}
+                disabled={true}
                 className="cursor-pointer"
               >
                 <Upload className="h-4 w-4" />
