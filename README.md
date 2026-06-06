@@ -30,7 +30,7 @@ pinned: false
 
 ## 🌟 Overview
 
-Introlix is an intelligent research platform that combines the power of AI agents with advanced search capabilities to streamline your research workflow. Whether you're conducting academic research, market analysis, or deep investigations, Introlix provides a comprehensive suite of tools to help you gather, organize, and synthesize information efficiently.
+Introlix is an intelligent research platform (yet) that combines the power of AI agents with advanced search capabilities to streamline your research workflow. Whether you're conducting academic research, market analysis, or deep investigations, Introlix provides a comprehensive suite of tools to help you gather, organize, and synthesize information efficiently.
 
 [![Watch the Demo](https://img.youtube.com/vi/8ZGjbblA27M/0.jpg)](https://youtu.be/8ZGjbblA27M?si=g-HfaEyrkdyr9F1c)
 
@@ -75,7 +75,8 @@ The Research Desk guides you through a comprehensive research process:
 
 ### Coming Soon (Beta Features)
 
-- **Document Formatting**: Export research as blog posts, research papers, or custom formats
+- **Audio Processor**: Process audio to enhance it and remove stutters from audio with all local models.
+- **Document Formatting**: Export research as blog posts, research papers, or custom formats.
 - **Reference Management**: Automatic citation generation with inline references [1], [2], etc.
 
 ---
