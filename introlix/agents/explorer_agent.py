@@ -48,7 +48,7 @@ import hashlib
 from typing import List, Union
 from pydantic import BaseModel, Field
 import chromadb
-from introlix.config import MIN_RELEVANCE_SCORE
+from introlix.config import MIN_RELEVANCE_SCORE, CHROMA_DB_DIR
 from introlix.tools.web_crawler import web_crawler, ScrapeResult
 from introlix.tools.web_search import SearXNGClient, duckduckgo_search
 from introlix.utils.text_chunker import TextChunker
@@ -66,7 +66,7 @@ class ExplorerAgentOutput(BaseModel):
 
 class ExplorerAgent:
     def __init__(self):
-        self.chroma_client = chromadb.PersistentClient(path="./chroma_db")
+        self.chroma_client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
         self.embedding_model = app_state.embedding_model or SentenceTransformer(
             "all-MiniLM-L6-v2"
         )

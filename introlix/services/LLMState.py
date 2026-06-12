@@ -82,7 +82,10 @@ class LLMState:
         """
         model_path = os.path.join(MODEL_SAVE_DIR, model_name)
 
+        print(f"\n\n\nModel path is: {model_path}\n\n\n")
+
         if not os.path.basename(model_name) == model_name:
+            print(f"Invalid model name: {model_name} of {os.path.basename(model_name)}")
             raise HTTPException(status_code=400, detail="Invalid model name")
         if not os.path.exists(model_path):
             raise HTTPException(

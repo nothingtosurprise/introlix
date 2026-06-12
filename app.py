@@ -19,7 +19,7 @@ from introlix.routes.research_desk import research_desk_router
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from introlix.state import app_state
-from introlix.config import SUPPORTED_LLMs
+from introlix.config import SUPPORTED_LLMs, CHROMA_DB_DIR
 from sentence_transformers import SentenceTransformer
 
 
@@ -218,7 +218,7 @@ async def delete_workspace(
 
     # External Cleanup: Delete Search Vector Data (Chromadb)
     try:
-        chroma_client = chromadb.PersistentClient(path="./chroma_db")
+        chroma_client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
         chroma_client.delete_collection(name=f"workspace_{str(workspace.id).replace('-', '_')}")
     except Exception:
         pass  # If vector index cleanup fails or is empty, skip quietly

@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Type, Callable, Union, AsyncGenera
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from introlix.config import SUPPORTED_LLMs
-from introlix.llm_config import cloud_llm_manager
+from introlix.llm_config import cloud_llm_manager, local_llm_manager
 
 DEFAULT_AGENT_NAME = "Agent"
 DEFAULT_AGENT_DESCRIPTION = "An agent that can perform a task"
@@ -282,24 +282,37 @@ class BaseAgent(ABC):
 
         return messages
 
-    async def _call_llm_with_messages(self, messages: List[Dict], stream: bool = False):
+    async def _call_llm_with_messages(self, messages: List[Dict], cloud: bool = False, stream: bool = True, tools: Optional[List[Dict[str, Any]]] = None) -> Union[str, AsyncGenerator[str, None]]:
         """
         Calls the LLM with a list of message objects (chat history format).
 
         Args:
             messages (List[Dict]): A list of message dictionaries (e.g., [{"role": "user", "content": "..."}]).
+            cloud (bool): Whether to use the cloud LLM manager. Defaults to False.
             stream (bool): Whether to stream the response. Defaults to False.
-
+            tools (Optional[List[Dict[str, Any]]]): Optional list of tool definitions to pass to the LLM.
         Returns:
             The output from the cloud LLM manager.
         """
 
-        output = await cloud_llm_manager(
-            model_name=self.model,
-            provider=self.CLOUD_PROVIDER,
-            messages=messages,
-            stream=stream,
-        )
+        if self.CLOUD_PROVIDER == "local":
+            cloud = False
+
+        if cloud:
+            output = await cloud_llm_manager(
+                model_name=self.model,
+                provider=self.CLOUD_PROVIDER,
+                messages=messages,
+                stream=stream,
+                tools=tools,
+            )
+        else:
+            output = await local_llm_manager(
+                model_name=self.model,
+                messages=messages,
+                stream=stream,
+                tools=tools,
+            )
 
         return output
 

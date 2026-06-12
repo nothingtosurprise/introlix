@@ -18,7 +18,6 @@ the final answer to the caller.
 import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any, AsyncGenerator
-from pydantic import BaseModel, Field
 
 from introlix.agents.baseclass import AgentInput, BaseAgent, PromptTemplate, Tool
 from introlix.agents.explorer_agent import ExplorerAgent
@@ -171,12 +170,18 @@ class ChatAgent(BaseAgent):
         messages.append({"role": "user", "content": user_prompt})
 
         for _ in range(self.max_iterations):
-            stream = await cloud_llm_manager(
-                model_name=self.model,
-                provider=self.CLOUD_PROVIDER,
+            stream = await self._call_llm_with_messages(
                 messages=messages,
+                cloud=True if self.CLOUD_PROVIDER else False,
+                stream=True,
                 tools=ALL_TOOL_DEFS,
             )
+            # stream = await cloud_llm_manager(
+            #     model_name=self.model,
+            #     provider=self.CLOUD_PROVIDER,
+            #     messages=messages,
+            #     tools=ALL_TOOL_DEFS,
+            # )
 
             # Consume stream: collect tool calls, stream answer chunks
             pending_tool_calls: List[Dict[str, Any]] = []
@@ -312,13 +317,11 @@ class ChatAgent(BaseAgent):
             # Add tool results to messages for the next iteration
             messages.extend(tool_result_messages)
 
-            # Continue to next iteration — LLM will now generate answer with tool results
-
 
 async def main():
-    agent = ChatAgent(unique_id="user2545454", model="gemini-3.1-flash-lite")
+    agent = ChatAgent(unique_id="user2545454", model="Qwen3.5-2B-Q4_K_M")
 
-    async for chunk in agent.arun("Who is leader of USA use the search tool not fast search this time"):
+    async for chunk in agent.arun("Who are you?"):
         print(chunk, end="", flush=True)
 
 

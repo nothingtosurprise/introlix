@@ -150,8 +150,8 @@ def download_hf_model(username: str, repo_id: str, branch_name: str, model_name:
 if __name__ == "__main__":
     for update in download_hf_model(
         username="unsloth",
-        repo_id="Qwen3-4B-Thinking-2507-GGUF",
+        repo_id="Qwen3.5-2B-GGUF",
         branch_name="main",
-        model_name="Qwen3-4B-Thinking-2507-Q4_K_M.gguf",
+        model_name="Qwen3.5-2B-Q4_K_M.gguf",
     ):
         print(update)
