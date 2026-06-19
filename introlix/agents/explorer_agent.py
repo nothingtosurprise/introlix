@@ -48,7 +48,7 @@ import hashlib
 from typing import List, Union
 from pydantic import BaseModel, Field
 import chromadb
-from introlix.config import MIN_RELEVANCE_SCORE, CHROMA_DB_DIR
+from introlix.config import MIN_RELEVANCE_SCORE, CHROMA_DB_DIR, CHUNK_SIZE, CHUNK_OVERLAP_SIZE
 from introlix.tools.web_crawler import web_crawler, ScrapeResult
 from introlix.tools.web_search import SearXNGClient, duckduckgo_search
 from introlix.utils.text_chunker import TextChunker
@@ -337,7 +337,7 @@ class ExplorerAgent:
             if isinstance(crawled_result, str):
                 return []
 
-            chunker = TextChunker(chunk_size=400, overlap=50)
+            chunker = TextChunker(chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP_SIZE)
             chunks = chunker.chunk_text(
                 crawled_result.text
                 if isinstance(crawled_result, ScrapeResult)

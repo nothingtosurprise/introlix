@@ -114,7 +114,13 @@ class ChatAgent(BaseAgent):
                 max_results=5,
             )
 
-            return "\n\n---\n\n".join(str(results))
+            print(f"\n\n\n{len(results)}\n\n\n")
+
+            clean_results = [r.chunk_text for r in results if hasattr(r, 'chunk_text')]
+
+            print(f"\n\n\n{len(" ".join(clean_results))}\n\n\n")
+
+            return " ".join(clean_results)
 
         return [
             Tool(name="search", description="Deep internet search.", function=search),
@@ -176,12 +182,6 @@ class ChatAgent(BaseAgent):
                 stream=True,
                 tools=ALL_TOOL_DEFS,
             )
-            # stream = await cloud_llm_manager(
-            #     model_name=self.model,
-            #     provider=self.CLOUD_PROVIDER,
-            #     messages=messages,
-            #     tools=ALL_TOOL_DEFS,
-            # )
 
             # Consume stream: collect tool calls, stream answer chunks
             pending_tool_calls: List[Dict[str, Any]] = []
@@ -289,6 +289,11 @@ class ChatAgent(BaseAgent):
                 try:
                     result = await tool_obj.execute(tool_args)
                     result_str = str(result)
+                    stitched = result_str.replace('\n', '')
+                    stitched = stitched.replace('\xa0', ' ') # Clean up the weird non-breaking space blocks
+                    cleaned_result_str = " ".join(stitched.split())
+
+
                     yield json.dumps({
                         "type": "tool_result",
                         "tool": tool_name,
@@ -298,7 +303,7 @@ class ChatAgent(BaseAgent):
                         "role": "tool",
                         "tool_call_id": tc.get("id") or tc["name"],
                         "name": tool_name,
-                        "content": result_str,
+                        "content": cleaned_result_str,
                     })
                 except Exception as e:
                     error_msg = f"Error: {str(e)}"
@@ -319,10 +324,14 @@ class ChatAgent(BaseAgent):
 
 
 async def main():
-    agent = ChatAgent(unique_id="user2545454", model="Qwen3.5-2B-Q4_K_M")
+    agent = ChatAgent(unique_id="user2545454", model="gemma-4-E2B-it-Q4_K_M.gguf")
+    while True:
+        prompt = input("You: ")
+        if prompt.lower() in ["exit", "quit"]:
+            break
 
-    async for chunk in agent.arun("Who are you?"):
-        print(chunk, end="", flush=True)
+        async for chunk in agent.arun(prompt):
+            print(chunk, end="", flush=True)
 
 
 if __name__ == "__main__":

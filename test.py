@@ -17,7 +17,7 @@ from introlix.tools.tool_def import SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF
 
 tools = [SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF]
 
-DEFAULT_MODEL_NAME = "Qwen3-4B-Thinking-2507-Q4_K_M.gguf"
+DEFAULT_MODEL_NAME = "gemma-4-E2B-it-Q4_K_M.gguf"
 
 LOCAL_LLM_STATE = LLMState()
 

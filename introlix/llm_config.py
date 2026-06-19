@@ -1,10 +1,29 @@
-import asyncio
 import json
+import copy
 from typing import List, Dict, Any, Optional, AsyncGenerator, Union
 from introlix.services.LLMState import LLMState
 from introlix.config import SUPPORTED_LLMs
+from openai import AsyncOpenAI
+from introlix.config import LLAMA_SERVER_PORT
 
 llm_state = LLMState()
+
+def sanitize_messages_for_openai(messages):
+    sanitized = []
+    for msg in messages:
+        # Perform a deep copy so nested lists/dicts aren't mutated in your app state
+        new_msg = copy.deepcopy(msg)
+        
+        if new_msg.get("role") == "assistant" and isinstance(new_msg.get("content"), list):
+            text_pieces = []
+            for item in new_msg["content"]:
+                if item.get("type") in ["thought", "text"]:
+                    text_pieces.append(item.get("text", ""))
+            
+            new_msg["content"] = "\n".join(text_pieces) if text_pieces else ""
+            
+        sanitized.append(new_msg)
+    return sanitized
 
 
 async def cloud_llm_manager(
@@ -115,26 +134,78 @@ async def cloud_llm_manager(
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
+async def _local_llm_stream(
+    client: AsyncOpenAI,
+    model_name: str,
+    messages: List[Dict[str, Any]],
+    tools: Optional[List[Dict[str, Any]]] = None,
+) -> AsyncGenerator[str, None]:
+    """Helper generator to stream local LLM tokens matching the event contract."""
+    tool_calls_buffer: Dict[int, Dict] = {}
+
+    try:
+        response = await client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            temperature=0.1,
+            stream=True,
+            tools=tools if tools else None,
+            tool_choice="auto" if tools else None
+        )
+
+        async for chunk in response:
+            if not chunk.choices:
+                continue
+                
+            delta = chunk.choices[0].delta
+
+            # Extract thinking process
+            if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                yield json.dumps({"type": "thinking", "content": delta.reasoning_content})
+
+            # Extract content chunks
+            elif delta.content:
+                yield json.dumps({"type": "answer_chunk", "content": delta.content})
+
+            # Extract tool calls
+            elif delta.tool_calls:
+                print("\n\n\nGetitng tool call\n\n\n")
+                for tool_call in delta.tool_calls:
+                    index = tool_call.index
+                    if index not in tool_calls_buffer:
+                        tool_calls_buffer[index] = {
+                            "id": tool_call.id or f"local_call_{index}",
+                            "name": tool_call.function.name if tool_call.function else "",
+                            "arguments": "",
+                        }
+                    if tool_call.function and tool_call.function.arguments:
+                        tool_calls_buffer[index]["arguments"] += tool_call.function.arguments
+
+    except Exception as e:
+        raise RuntimeError(f"Error communicating with local OpenAI-compatible endpoint: {str(e)}")
+
+    # Flush accumulated tool calls downstream after stream completes
+    for call in tool_calls_buffer.values():
+        try:
+            parsed_arguments = json.loads(call["arguments"]) if call["arguments"] else {}
+        except json.JSONDecodeError:
+            parsed_arguments = {}
+            
+        yield json.dumps({
+            "type": "tool_call",
+            "id": call["id"],
+            "name": call["name"],
+            "arguments": parsed_arguments,
+        })
+
 async def local_llm_manager(
     model_name: str,
     messages: List[Dict[str, Any]],
     stream: bool = True,
     tools: Optional[List[Dict[str, Any]]] = None,
-) -> AsyncGenerator[str, None]:
+) -> Union[str, AsyncGenerator[str, None]]:
     """
-    Make a call to a local llama.cpp model and stream the response token-by-token.
-
-    Returns an async generator (matching the cloud_llm_manager contract) yielding
-    JSON-encoded event strings:
-      - {"type": "thinking",     "content": "..."}   — model reasoning
-      - {"type": "tool_call",    "id": "...", "name": "...", "arguments": {...}}
-      - {"type": "answer_chunk", "content": "..."}   — streaming text chunk
-
-    llama.cpp is a sync C library. To get true token-by-token streaming inside
-    an async FastAPI context without blocking the event loop, we run the sync
-    iterator in a background thread and forward each chunk to the async generator
-    via an asyncio.Queue + call_soon_threadsafe. This is the minimum necessary
-    bridge between a sync producer and an async consumer.
+    Make an HTTP call to the local llama-server instance and stream/return response.
 
     Args:
         model_name: The name of the local model to use.
@@ -143,79 +214,30 @@ async def local_llm_manager(
         tools: Optional list of tool definitions.
     """
     # load_model uses asyncio.Lock so it must be awaited
-    if llm_state.llm is None:
+    if llm_state.llm is None or llm_state.llm.poll() is not None:
         await llm_state.load_model(model_name)
-    model = llm_state.llm
 
-    if model is None:
-        raise RuntimeError("Failed to load local llama model")
+    print(f"LLM state should run, with message {messages}")
 
-    _DONE = object()  # sentinel: signals the thread has finished
-    queue: asyncio.Queue = asyncio.Queue()
-    loop = asyncio.get_event_loop()
+    messages = sanitize_messages_for_openai(messages)
 
-    def _produce():
-        """Runs in a background thread. Pushes each llama.cpp chunk into the queue."""
+    client = AsyncOpenAI(
+        base_url=f"http://localhost:{LLAMA_SERVER_PORT}/v1", 
+        api_key="local-llama"
+    )
+
+    use_stream = stream or (tools is not None)
+
+    if use_stream:
+        return _local_llm_stream(client, model_name, messages, tools)
+    else:
         try:
-            response = model.create_chat_completion(
+            response = await client.chat.completions.create(
+                model=model_name,
                 messages=messages,
                 temperature=0.1,
-                max_tokens=0,
-                stream=stream,
-                tools=tools,
-                tool_choice="auto",
+                stream=False,
             )
-            for chunk in response:
-                # call_soon_threadsafe is the only safe way to talk to the event
-                # loop from a non-async thread
-                loop.call_soon_threadsafe(queue.put_nowait, chunk)
-        finally:
-            loop.call_soon_threadsafe(queue.put_nowait, _DONE)
-
-    async def _stream_generator():
-        # Fire the producer thread — it runs concurrently with this generator
-        producer = loop.run_in_executor(None, _produce)
-        tool_calls_buffer: Dict[int, Dict] = {}
-
-        while True:
-            chunk = await queue.get()  # yields control to event loop between tokens
-            if chunk is _DONE:
-                break
-
-            delta = chunk["choices"][0]["delta"]
-
-            if delta.get("reasoning_content"):
-                yield json.dumps({"type": "thinking", "content": delta["reasoning_content"]})
-
-            elif delta.get("content"):
-                yield json.dumps({"type": "answer_chunk", "content": delta["content"]})
-
-            elif "tool_calls" in delta:
-                for tool_call in delta["tool_calls"]:
-                    index = tool_call["index"]
-                    if index not in tool_calls_buffer:
-                        tool_calls_buffer[index] = {
-                            "id": tool_call.get("id") or f"local_call_{index}",
-                            "name": tool_call.get("function", {}).get("name", ""),
-                            "arguments": "",
-                        }
-                    fn = tool_call.get("function", {})
-                    if "arguments" in fn:
-                        tool_calls_buffer[index]["arguments"] += fn["arguments"]
-
-        await producer  # wait for thread to fully clean up
-
-        # Flush accumulated tool calls after stream ends
-        for call in tool_calls_buffer.values():
-            try:
-                parsed_arguments = json.loads(call["arguments"]) if call["arguments"] else {}
-            except json.JSONDecodeError:
-                parsed_arguments = {}
-            yield json.dumps({
-                "type": "tool_call",
-                "id": call["id"],
-                "name": call["name"],
-                "arguments": parsed_arguments,
-            })
-
-    return _stream_generator()
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            raise RuntimeError(f"Error communicating with local OpenAI-compatible endpoint: {str(e)}")

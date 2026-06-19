@@ -171,6 +171,7 @@ class BaseAgent(ABC):
 
         self.conversation_history = conversation_history or []
 
+        self.CLOUD_PROVIDER = None
         for supported in SUPPORTED_LLMs:
                 if self.model == supported["value"]:
                     self.CLOUD_PROVIDER = supported["provider"]
@@ -202,6 +203,9 @@ class BaseAgent(ABC):
         Returns:
             Union[str, AsyncGenerator[str, None]]: The LLM's response as a string or an async generator if streaming.
         """
+        if self.CLOUD_PROVIDER:
+            cloud = (self.CLOUD_PROVIDER != "local")
+
         if cloud:
             messages = [
                 {"role": "system", "content": self.instruction},
@@ -215,14 +219,17 @@ class BaseAgent(ABC):
             )
             return output
         else:
-            # Local model (non-streaming only)
-            output = self.model.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": self.instruction},
-                    {"role": "user", "content": prompt},
-                ],
+            # Local model
+            messages = [
+                {"role": "system", "content": self.instruction},
+                {"role": "user", "content": prompt},
+            ]
+            output = await local_llm_manager(
+                model_name=self.model,
+                messages=messages,
+                stream=stream,
             )
-            return output.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return output
 
     def _build_messages_array(
         self, user_prompt: str, state: Dict[str, Any]
@@ -295,8 +302,8 @@ class BaseAgent(ABC):
             The output from the cloud LLM manager.
         """
 
-        if self.CLOUD_PROVIDER == "local":
-            cloud = False
+        if self.CLOUD_PROVIDER:
+            cloud = (self.CLOUD_PROVIDER != "local")
 
         if cloud:
             output = await cloud_llm_manager(

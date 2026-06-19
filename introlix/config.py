@@ -61,3 +61,17 @@ for model_path in MODEL_SAVE_DIR.glob("*.gguf"):
 
 # Some settings for the app
 MIN_RELEVANCE_SCORE = 0.40
+CHUNK_SIZE = 400
+CHUNK_OVERLAP_SIZE=30
+
+# llama-cpp config
+LLAMA_CPP_VERSION = "b9700"
+CUDA_VERSION = {
+    12: 12.4,
+    13: 13.3
+}
+LLAMA_CPP_PATH = APP_PATH / f"llama-{LLAMA_CPP_VERSION}"
+LLAMA_SERVER_PATH = os.path.join(LLAMA_CPP_PATH, "llama-server")
+LLAMA_SERVER_PORT = 8044
+LLAMA_CPP_CTX = 8192
+LLAMA_CPP_N_GPU_LAYERS = int(os.environ.get("LLAMA_CPP_N_GPU_LAYERS", "99"))
