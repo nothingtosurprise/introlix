@@ -5,7 +5,6 @@ import React, { useMemo, useState } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Streamdown } from 'streamdown';
-// import { code } from '@streamdown/code';
 import { mermaid } from '@streamdown/mermaid';
 import { math } from '@streamdown/math';
 import { cjk } from '@streamdown/cjk';
@@ -135,11 +134,9 @@ export const ChatMessage = ({ message, isStreaming = false }: ChatMessageProps) 
                                     </div>
                                     <CollapsibleContent className="overflow-hidden data-[state=open]:animate-slide-down data-[state=closed]:animate-slide-up">
                                         <div className="p-4 ml-3 pl-4 border-l border-accent rounded-md space-y-2">
-                                            {thoughts.map((thought, idx) => (
-                                                <div key={idx} className="italic text-sm text-muted-foreground">
-                                                    {thought}
-                                                </div>
-                                            ))}
+                                            <div className="italic text-sm text-muted-foreground whitespace-pre-wrap">
+                                                {thoughts.join("")}
+                                            </div>
                                         </div>
                                     </CollapsibleContent>
                                 </Collapsible>

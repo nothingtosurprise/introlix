@@ -217,8 +217,6 @@ async def local_llm_manager(
     if llm_state.llm is None or llm_state.llm.poll() is not None:
         await llm_state.load_model(model_name)
 
-    print(f"LLM state should run, with message {messages}")
-
     messages = sanitize_messages_for_openai(messages)
 
     client = AsyncOpenAI(

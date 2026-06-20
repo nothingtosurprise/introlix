@@ -9,7 +9,7 @@ internet search capabilities. The agent can:
 - Always stream responses in real-time
 - Iterate through multiple tool-call rounds (up to max_iterations)
 
-The ChatAgent passes tool definitions directly to the LLM API (AI Studio / OpenRouter),
+The ChatAgent passes tool definitions directly to the LLM API (AI Studio / OpenRouter / LLAMA-CPP),
 receives native tool-call events from the stream, executes the requested tools, then
 feeds results back into the conversation for the next iteration — all while streaming
 the final answer to the caller.
@@ -21,7 +21,6 @@ from typing import List, Optional, Dict, Any, AsyncGenerator
 
 from introlix.agents.baseclass import AgentInput, BaseAgent, PromptTemplate, Tool
 from introlix.agents.explorer_agent import ExplorerAgent
-from introlix.llm_config import cloud_llm_manager
 from introlix.prompts import chat_agent_prompt
 from introlix.tools.tool_def import SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF
 from ddgs import DDGS
@@ -33,8 +32,7 @@ class ChatAgent(BaseAgent):
     """
     An agent designed for conversational interactions with search capabilities.
 
-    Uses native LLM tool-calling (passed via API) rather than embedding tool
-    descriptions in the system prompt. Always streams responses. Supports
+    Uses native LLM tool-calling. Always streams responses. Supports
     multi-turn iteration: tool call → execute → feed result back → repeat.
 
     Attributes:
@@ -134,16 +132,6 @@ class ChatAgent(BaseAgent):
     async def arun(self, user_prompt: str) -> AsyncGenerator[str, None]:
         """
         Runs the agent asynchronously with native tool-calling and always-on streaming.
-
-        Flow:
-        1. Build messages (system + conversation history + current user query).
-        2. Call LLM with tools passed via API, stream=True always.
-        3. Stream answer chunks directly to caller.
-        4. Collect any tool_call events from the stream.
-        5. Execute all requested tools.
-        6. Append tool results to messages, yield tool status events to caller.
-        7. Loop back to step 2 (up to max_iterations).
-        8. If no tool calls in an iteration, answer is already streamed — done.
 
         Args:
             user_prompt (str): The user's input query.
