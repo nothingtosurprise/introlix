@@ -32,7 +32,17 @@ from fastapi import HTTPException
 from typing import Optional, AsyncGenerator, List, Dict, Any, TYPE_CHECKING
 from google import genai
 from google.genai import types
-from introlix.config import MODEL_SAVE_DIR, OPEN_ROUTER_KEY, GEMINI_API_KEY, LLAMA_CPP_PATH, LLAMA_SERVER_PATH, LLAMA_SERVER_PORT, LLAMA_CPP_CTX, LLAMA_CPP_N_GPU_LAYERS
+from introlix.config import (
+    MODEL_SAVE_DIR,
+    OPEN_ROUTER_KEY,
+    GEMINI_API_KEY,
+    LLAMA_CPP_PATH,
+    LLAMA_SERVER_PATH,
+    LLAMA_SERVER_PORT,
+    LLAMA_CPP_CTX, 
+    LLAMA_CPP_N_GPU_LAYERS, 
+    PHYSICAL_CORES
+)
 
 if TYPE_CHECKING:
     from llama_cpp import Llama
@@ -127,7 +137,9 @@ class LLMState:
                     "-m", model_path,
                     "--port", str(LLAMA_SERVER_PORT),
                     "-ngl", str(attempt_gpu_layers),
-                    "-c", str(LLAMA_CPP_CTX)
+                    "-c", str(LLAMA_CPP_CTX),
+                    "-t", str(PHYSICAL_CORES),
+                    "--threads-batch", str(PHYSICAL_CORES)
                 ]
                 try:
                     self.llm = subprocess.Popen(command, cwd=LLAMA_CPP_PATH)

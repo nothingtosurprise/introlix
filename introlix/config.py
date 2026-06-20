@@ -1,4 +1,5 @@
 import os
+import psutil
 from platformdirs import user_data_dir
 from pathlib import Path
 from dotenv import load_dotenv
@@ -75,3 +76,4 @@ LLAMA_SERVER_PATH = os.path.join(LLAMA_CPP_PATH, "llama-server")
 LLAMA_SERVER_PORT = 8044
 LLAMA_CPP_CTX = 8192
 LLAMA_CPP_N_GPU_LAYERS = int(os.environ.get("LLAMA_CPP_N_GPU_LAYERS", "99"))
+PHYSICAL_CORES = psutil.cpu_count(logical=False)
