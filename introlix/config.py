@@ -38,12 +38,6 @@ MODEL_SAVE_DIR = APP_PATH / "models"
 # cloud provider
 CLOUD_PROVIDER = "google_ai_studio"  # or "openrouter"
 
-# AUTO model
-if CLOUD_PROVIDER == "openrouter":
-    AUTO_MODEL = "deepseek/deepseek-v4-flash:free"
-elif CLOUD_PROVIDER == "google_ai_studio":
-    AUTO_MODEL = "gemini-3.1-flash-lite"
-
 # Supported LLMs
 SUPPORTED_LLMs = [
     {"name": "Gemini 3.5 Flash", "value": "gemini-3.5-flash", "provider": "google_ai_studio"},
@@ -59,6 +53,14 @@ for model_path in MODEL_SAVE_DIR.glob("*.gguf"):
     SUPPORTED_LLMs.append(
         {"name": model_path.stem, "value": str(model_path.stem) + ".gguf", "provider": "local"} # only gguf is supported till now
     )
+
+# AUTO 
+if SUPPORTED_LLMs and "local" in [model["provider"] for model in SUPPORTED_LLMs]:
+    AUTO_MODEL = [model for model in SUPPORTED_LLMs if model["provider"] == "local"][0]["value"]
+elif CLOUD_PROVIDER == "openrouter" and OPEN_ROUTER_KEY:
+    AUTO_MODEL = "deepseek/deepseek-v4-flash:free"
+elif CLOUD_PROVIDER == "google_ai_studio" and GEMINI_API_KEY:
+    AUTO_MODEL = "gemini-3.1-flash-lite"
 
 # Some settings for the app
 MIN_RELEVANCE_SCORE = 0.40
