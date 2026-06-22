@@ -41,7 +41,8 @@ from introlix.config import (
     LLAMA_SERVER_PORT,
     LLAMA_CPP_CTX, 
     LLAMA_CPP_N_GPU_LAYERS, 
-    PHYSICAL_CORES
+    PHYSICAL_CORES,
+    N_SERVER_SLOTS
 )
 
 if TYPE_CHECKING:
@@ -139,6 +140,7 @@ class LLMState:
                     "-ngl", str(attempt_gpu_layers),
                     "-c", str(LLAMA_CPP_CTX),
                     "-t", str(PHYSICAL_CORES),
+                    "-np", str(N_SERVER_SLOTS),
                     "--threads-batch", str(PHYSICAL_CORES)
                 ]
                 try:

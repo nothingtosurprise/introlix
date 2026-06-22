@@ -112,11 +112,7 @@ class ChatAgent(BaseAgent):
                 max_results=5,
             )
 
-            print(f"\n\n\n{len(results)}\n\n\n")
-
             clean_results = [r.chunk_text for r in results if hasattr(r, 'chunk_text')]
-
-            print(f"\n\n\n{len(" ".join(clean_results))}\n\n\n")
 
             return " ".join(clean_results)
 
@@ -217,8 +213,8 @@ class ChatAgent(BaseAgent):
                 "count": len(tool_names),
             }) + "\n"
 
-            # Add assistant message with tool call intent (for providers that need it)
-            assistant_content = []
+            # Need to structure this specifically for Google AI Studio, mapping out the model's "thought" blocks and tool execution steps.
+            assistant_content = [] 
             if thinking_text_parts:
                 assistant_content.append({
                     "type": "thought",

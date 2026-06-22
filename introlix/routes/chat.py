@@ -12,6 +12,7 @@ Endpoints:
 - DELETE /workspace/{workspace_id}/chat/{chat_id}/ - Delete a chat
 """
 
+import json
 from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession

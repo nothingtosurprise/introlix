@@ -8,22 +8,31 @@ from introlix.config import LLAMA_SERVER_PORT
 
 llm_state = LLMState()
 
-def sanitize_messages_for_openai(messages):
-    sanitized = []
+def messages_preprocess(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Preprocess messages to ensure they are in the correct format and remove any unnecessary fields before sending to the LLM.
+    """
+    processed_messages = []
     for msg in messages:
-        # Perform a deep copy so nested lists/dicts aren't mutated in your app state
-        new_msg = copy.deepcopy(msg)
-        
-        if new_msg.get("role") == "assistant" and isinstance(new_msg.get("content"), list):
-            text_pieces = []
-            for item in new_msg["content"]:
-                if item.get("type") in ["thought", "text"]:
-                    text_pieces.append(item.get("text", ""))
-            
-            new_msg["content"] = "\n".join(text_pieces) if text_pieces else ""
-            
-        sanitized.append(new_msg)
-    return sanitized
+        # remove thinking fields
+        if msg.get("role") == "assistant" if not isinstance(msg.get("content"), list) else False:
+            answer_parts = []
+            for item in msg.get("content").strip().split('\n'):
+                if not item.strip():
+                    continue
+                try:
+                    obj = json.loads(item)
+                    if obj.get("type") == "answer_chunk":
+                        answer_parts.append(obj["content"])
+                except json.JSONDecodeError:
+                    pass
+
+            if answer_parts:
+                msg = dict(msg)
+                msg["content"] = ''.join(answer_parts)
+
+        processed_messages.append(msg)
+    return processed_messages
 
 
 async def cloud_llm_manager(
@@ -61,6 +70,9 @@ async def cloud_llm_manager(
         if model_name == supported["value"]:
             provider = supported["provider"]
             break
+
+    # proprocess messages before sending to LLM
+    messages = messages_preprocess(messages)
 
     # When tools are provided, streaming is always used
     use_stream = stream or (tools is not None)
@@ -169,7 +181,6 @@ async def _local_llm_stream(
 
             # Extract tool calls
             elif delta.tool_calls:
-                print("\n\n\nGetitng tool call\n\n\n")
                 for tool_call in delta.tool_calls:
                     index = tool_call.index
                     if index not in tool_calls_buffer:
@@ -217,7 +228,8 @@ async def local_llm_manager(
     if llm_state.llm is None or llm_state.llm.poll() is not None:
         await llm_state.load_model(model_name)
 
-    messages = sanitize_messages_for_openai(messages)
+    # proprocess messages before sending to LLM
+    messages = messages_preprocess(messages)
 
     client = AsyncOpenAI(
         base_url=f"http://localhost:{LLAMA_SERVER_PORT}/v1", 
