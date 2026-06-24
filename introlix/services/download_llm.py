@@ -3,27 +3,39 @@ Hugging Face Model Download Service
 
 This module provides functionality for downloading large language models from Hugging Face
 repositories with support for resume capability and progress tracking.
-
-Features:
----------
-- Streaming downloads with progress updates
-- Resume capability for interrupted downloads
-- JSON-formatted progress reporting
-- Automatic directory creation
-- File size validation
-
-The download function yields JSON progress updates that can be streamed to clients
-for real-time download status monitoring.
 """
 
+import re
 import os
 import requests
 import json
 from introlix.config import HF_MODEL_URL, MODEL_SAVE_DIR
 
 
+def find_quant(username, repo_id, quant="Q4_K_M"):
+    if (quant is None):
+        quant = "Q4_K_M"
+    url = f"https://huggingface.co/{username}/{repo_id}/tree/main"
+    r = requests.get(url, headers={
+        "User-Agent": "Mozilla/5.0"
+    })
+    if r.status_code != 200:
+        raise Exception("Blocked or rate limited")
+    files = list(set(re.findall(r'([A-Za-z0-9\.\-_]+\.gguf)', r.text)))
 
-def download_hf_model(username: str, repo_id: str, branch_name: str, model_name: str, save_name: str = None):
+    for f in files:
+        if f"{quant}.gguf" in str(f).split("-"):
+            return f
+    return None
+
+
+def download_hf_model(
+    username: str,
+    repo_id: str,
+    branch_name: str,
+    quant: str = "Q4_K_M",
+    save_name: str = None,
+):
     """
     Download a model from Hugging Face with resume capability and progress tracking.
 
@@ -35,7 +47,7 @@ def download_hf_model(username: str, repo_id: str, branch_name: str, model_name:
         username (str): Hugging Face username or organization name.
         repo_id (str): Repository identifier on Hugging Face.
         branch_name (str): Branch name (usually "main").
-        model_name (str): Name of the model file to download.
+        quant (str, optional): Quantization of the model. If not given then it will use quant Q4_K_M
         save_name (str, optional): Custom name to save the file as. If None, uses model_name.
 
     Yields:
@@ -63,6 +75,13 @@ def download_hf_model(username: str, repo_id: str, branch_name: str, model_name:
         - Supports HTTP 206 (Partial Content) for resume capability
         - Uses 8KB chunks for efficient memory usage
     """
+    model_name = find_quant(username, repo_id, quant)
+    if not model_name:
+        yield json.dumps(
+            {"status": "error", "message": "No quantized model found in repo"}
+        ) + "\n"
+        return
+
     MODEL_URL = HF_MODEL_URL.format(
         username=username,
         repo_id=repo_id,
@@ -101,8 +120,13 @@ def download_hf_model(username: str, repo_id: str, branch_name: str, model_name:
             ) + "\n"
             return
 
-        if r.status_code in (200, 206):  # 200 = full download, 206 = partial content (resume)
-            mode = "ab" if file_size > 0 else "wb"  # Append mode if resuming, write mode otherwise
+        if r.status_code in (
+            200,
+            206,
+        ):  # 200 = full download, 206 = partial content (resume)
+            mode = (
+                "ab" if file_size > 0 else "wb"
+            )  # Append mode if resuming, write mode otherwise
             downloaded = file_size
             with open(MODEL_PATH, mode) as f:
                 for chunk in r.iter_content(chunk_size=8192):
@@ -143,7 +167,7 @@ def download_hf_model(username: str, repo_id: str, branch_name: str, model_name:
                         "total_bytes": total_size,
                         "message": f"downloaded {os.path.basename(MODEL_PATH)}",
                     }
-                ) + "\n" 
+                ) + "\n"
                 return
 
 
@@ -152,6 +176,6 @@ if __name__ == "__main__":
         username="unsloth",
         repo_id="Qwen3.5-4B-GGUF",
         branch_name="main",
-        model_name="Qwen3.5-4B-Q4_K_M.gguf",
+        quant="Q4_K_M",
     ):
         print(update)

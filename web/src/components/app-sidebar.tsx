@@ -1,8 +1,7 @@
 "use client"
-import { Bot, ChevronsUpDown, FolderOpen, HelpCircle, LogOut, Moon, Settings, Sparkles, Sun } from "lucide-react";
+import { Bot, ChevronsUpDown, FolderOpen, HelpCircle, LibraryBig, LogOut, Moon, Settings, Sparkles, Sun } from "lucide-react";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "./ui/sidebar";
 import Link from "next/link";
-import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useAllWorkspacesItems } from "@/hooks/use-chat";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -11,7 +10,8 @@ import { clearAuthToken, getAuthToken, getUserInfo } from "@/app/action";
 import { useRouter } from "next/navigation";
 
 const navigation = [
-    { name: "Workspaces", href: "/workspaces", icon: FolderOpen }
+    { name: "Workspaces", href: "/workspaces", icon: FolderOpen },
+    { name: "Hub", href: "/hub", icon: LibraryBig },
 ];
 
 export function AppSidebar() {

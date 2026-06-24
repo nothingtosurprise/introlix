@@ -408,3 +408,87 @@ export async function getModels(): Promise<ModelListResponse[]> {
   const data = await res.json();
   return data.items;
 }
+
+// -------------------- Service Endpoints --------------------
+export async function getLlamaCppBuildStatus(): Promise<{ status: string }> {
+  const TOKEN = await getAuthToken();
+  const res = await fetch(`${BASE_URL}/services/llama_cpp_build_status`, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    }
+  });
+  if (!res.ok) throw new Error("Failed to fetch llama.cpp build status");
+  return res.json();
+}
+
+export async function* downloadLlamaCppBuild(signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  const TOKEN = await getAuthToken();
+  const res = await fetch(`${BASE_URL}/services/download_llama_cpp_build`, {
+    signal,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      yield chunk;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function* downloadHfModel(username: string, repo_id: string, quant?: string, signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  const TOKEN = await getAuthToken();
+
+  const res = await fetch(`${BASE_URL}/services/download_model`, {
+    signal,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": `${API_KEY}`,
+      "Authorization": `Bearer ${TOKEN}`
+    },
+    body: JSON.stringify({ username, repo_id, quant })
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      yield chunk;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}

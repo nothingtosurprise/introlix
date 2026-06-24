@@ -202,3 +202,9 @@ class ResearchDesk(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Services
+class HFModelDownloadPayload(BaseModel):
+    username: str
+    repo_id: str
+    quant: Optional[str] = None

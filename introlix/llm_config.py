@@ -8,6 +8,23 @@ from introlix.config import LLAMA_SERVER_PORT
 
 llm_state = LLMState()
 
+def sanitize_messages_for_openai(messages):
+    sanitized = []
+    for msg in messages:
+        # Perform a deep copy so nested lists/dicts aren't mutated in your app state
+        new_msg = copy.deepcopy(msg)
+        
+        if new_msg.get("role") == "assistant" and isinstance(new_msg.get("content"), list):
+            text_pieces = []
+            for item in new_msg["content"]:
+                if item.get("type") in ["thought", "text"]:
+                    text_pieces.append(item.get("text", ""))
+            
+            new_msg["content"] = "\n".join(text_pieces) if text_pieces else ""
+            
+        sanitized.append(new_msg)
+    return sanitized
+
 def messages_preprocess(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Preprocess messages to ensure they are in the correct format and remove any unnecessary fields before sending to the LLM.
@@ -229,6 +246,7 @@ async def local_llm_manager(
         await llm_state.load_model(model_name)
 
     # proprocess messages before sending to LLM
+    messages = sanitize_messages_for_openai(messages)
     messages = messages_preprocess(messages)
 
     client = AsyncOpenAI(

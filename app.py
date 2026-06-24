@@ -14,6 +14,7 @@ from introlix.models import (
 )
 from introlix.schemas import PaginatedResponse
 from introlix.routes.chat import chat_router
+from introlix.routes.services import router as services_router
 from introlix.tools.web_crawler import get_httpx_client, get_shared_context, shutdown
 from introlix.routes.research_desk import research_desk_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -347,3 +348,4 @@ def read_root():
 app.include_router(chat_router)
 app.include_router(research_desk_router)
 app.include_router(auth_router)
+app.include_router(services_router)
