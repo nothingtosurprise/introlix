@@ -34,7 +34,8 @@ RUN pip install --no-cache-dir . \
 
 COPY web/package.json web/pnpm-lock.yaml* web/package-lock.json* /app/web/
 WORKDIR /app/web
-RUN pnpm install --frozen-lockfile --allow-build || pnpm install --allow-build
+RUN pnpm config set only-built-dependencies-file /dev/null \
+    && (pnpm install --frozen-lockfile || pnpm install)
 
 WORKDIR /app
 COPY . /app
