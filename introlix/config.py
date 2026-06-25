@@ -25,11 +25,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 # Database 
 DATA_DIR = APP_PATH / "data"
-DATA_DIR.mkdir(exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 DATABASE_URL = f"sqlite+aiosqlite:///{DATA_DIR}/introlix.db"
 
 CHROMA_DB_DIR = DATA_DIR / "chroma_db"
-CHROMA_DB_DIR.mkdir(exist_ok=True)
+CHROMA_DB_DIR.mkdir(parents=True, exist_ok=True)
 
 # model config
 HF_MODEL_URL = "https://huggingface.co/{username}/{repo_id}/resolve/{branch_name}/{model_name}?download=true"
