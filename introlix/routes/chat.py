@@ -10,20 +10,10 @@ Endpoints:
 - POST /workspace/{workspace_id}/chat/{chat_id}/ - Send a message and get streaming response
 - GET /workspace/{workspace_id}/chat/{chat_id}/ - Retrieve chat history
 - DELETE /workspace/{workspace_id}/chat/{chat_id}/ - Delete a chat
-
-Features:
----------
-- Automatic title generation for new chats
-- Streaming responses for real-time user experience
-- Conversation history persistence
-- Integration with ChatAgent for intelligent responses
-- Optional internet search capability
-- Model selection (auto or specific model)
 """
 
 import json
 from datetime import datetime
-from httpcore import request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -56,24 +46,6 @@ async def create_chat(
     This endpoint initializes a new chat session within the specified workspace.
     The chat starts with an empty message history and can be used for subsequent
     message exchanges.
-
-    Args:
-        workspace_id (str): The unique identifier of the workspace.
-        request (WorkspaceChat): The chat creation request containing initial chat data.
-        current_user (UserModel): The currently authenticated user.
-
-    Returns:
-        dict: A dictionary containing:
-            - message (str): Success message
-            - _id (str): The unique identifier of the created chat
-
-    Raises:
-        HTTPException: 404 if the workspace is not found.
-
-    Example:
-        POST /workspace/123/chat/new
-        Body: {"title": "My Chat"}
-        Response: {"message": "Chat created", "_id": "abc123"}
     """
     workspace_result = await db.execute(
         select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
@@ -118,40 +90,6 @@ async def chat(
 ):
     """
     Send a message to a chat and receive a streaming response.
-
-    This endpoint handles the main chat interaction:
-    1. Validates the chat exists
-    2. Generates a title if this is the first message
-    3. Saves the user message to the database
-    4. Initializes the ChatAgent with conversation history
-    5. Streams the AI response back to the client
-    6. Saves the assistant's response to the database
-
-    Args:
-        workspace_id (str): The unique identifier of the workspace.
-        chat_id (str): The unique identifier of the chat.
-        request (ChatRequest): The chat request containing:
-            - prompt (str): The user's message
-            - model (str): The model to use ("auto" or specific model name)
-            - search (bool): Whether to enable internet search
-
-    Returns:
-        StreamingResponse: A streaming response containing the AI's reply in real-time.
-
-    Raises:
-        HTTPException: 404 if the chat is not found.
-
-    Features:
-        - Automatic title generation for new chats
-        - Conversation history persistence
-        - Real-time streaming responses
-        - Optional internet search integration
-        - Automatic model selection when "auto" is specified
-
-    Example:
-        POST /workspace/123/chat/abc/
-        Body: {"prompt": "Hello", "model": "auto", "search": false}
-        Response: Streaming text response from the AI
     """
     result = await db.execute(
         select(WorkspaceChatModel).where(
@@ -234,14 +172,7 @@ async def chat(
     async def stream():
         nonlocal assistant_content
         async for chunk in chat_agent.arun(user_prompt):
-            try:
-                event = json.loads(chunk)
-                if event.get("type") == "answer_chunk":
-                    assistant_content += event.get("content", "")
-            except json.JSONDecodeError:
-                # Treat the chunk as plain text if it's not valid JSON
-                assistant_content += chunk
-
+            assistant_content += chunk
             yield chunk
 
         # After streaming completes, save assistant message
@@ -288,23 +219,6 @@ async def get_chat(chat_id: str, db: AsyncSession = Depends(get_db), current_use
 
     This endpoint fetches the complete chat history including all messages,
     metadata, and timestamps.
-
-    Args:
-        chat_id (str): The unique identifier of the chat.
-
-    Returns:
-        dict: The serialized chat document containing:
-            - _id (str): Chat identifier
-            - workspace_id (str): Associated workspace
-            - title (str): Chat title
-            - messages (list): Array of message objects
-            - created_at (datetime): Chat creation timestamp
-            - updated_at (datetime): Last update timestamp
-        str: "No Chat Found" if the chat doesn't exist
-
-    Example:
-        GET /workspace/123/chat/abc/
-        Response: {"_id": "abc", "title": "My Chat", "messages": [...]}
     """
     query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id).where(WorkspaceChatModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     result = await db.execute(query)
@@ -322,20 +236,6 @@ async def delete_chat(chat_id: str, db: AsyncSession = Depends(get_db), current_
 
     This endpoint permanently removes a chat and all its associated messages
     from the database. This action cannot be undone.
-
-    Args:
-        chat_id (str): The unique identifier of the chat to delete.
-
-    Returns:
-        dict: A dictionary containing:
-            - message (str): Success confirmation message
-
-    Raises:
-        HTTPException: 404 if the chat is not found.
-
-    Example:
-        DELETE /workspace/123/chat/abc/
-        Response: {"message": "Chat deleted successfully"}
     """
     query = select(WorkspaceChatModel).where(WorkspaceChatModel.id == chat_id).where(WorkspaceChatModel.workspace.has(WorkspaceModel.user_id == current_user.id))
     result = await db.execute(query)

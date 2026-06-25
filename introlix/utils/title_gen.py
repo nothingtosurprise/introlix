@@ -1,5 +1,5 @@
-from introlix.llm_config import cloud_llm_manager
-from introlix.config import CLOUD_PROVIDER
+from introlix.llm_config import cloud_llm_manager, local_llm_manager
+from introlix.config import CLOUD_PROVIDER, SUPPORTED_LLMs
 
 
 async def generate_title(prompt: str) -> str:
@@ -11,12 +11,15 @@ async def generate_title(prompt: str) -> str:
         {"role": "user", "content": prompt},
     ]
 
-    output = await cloud_llm_manager(
-        model_name="gemini-2.5-flash" if CLOUD_PROVIDER == "google_ai_studio" else "qwen/qwen3-4b:free",
-        provider=CLOUD_PROVIDER,
-        messages=messages,
-        stream=False,
-    )
+    if SUPPORTED_LLMs and "local" in [model["provider"] for model in SUPPORTED_LLMs]:
+        output = prompt
+    else:
+        output = await cloud_llm_manager(
+            model_name="gemini-2.5-flash" if CLOUD_PROVIDER == "google_ai_studio" else "qwen/qwen3-4b:free",
+            provider=CLOUD_PROVIDER,
+            messages=messages,
+            stream=False,
+        )
 
     return output
 

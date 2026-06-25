@@ -14,19 +14,20 @@ from introlix.models import (
 )
 from introlix.schemas import PaginatedResponse
 from introlix.routes.chat import chat_router
+from introlix.routes.services import router as services_router
 from introlix.tools.web_crawler import get_httpx_client, get_shared_context, shutdown
 from introlix.routes.research_desk import research_desk_router
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from introlix.state import app_state
-from introlix.config import SUPPORTED_LLMs
+from introlix.config import SUPPORTED_LLMs, CHROMA_DB_DIR
 from sentence_transformers import SentenceTransformer
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # adding embedding model and pinecone client to app state
-    app_state.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    app_state.embedding_model = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
     await init_db()
 
     # explorer agent setup
@@ -218,7 +219,7 @@ async def delete_workspace(
 
     # External Cleanup: Delete Search Vector Data (Chromadb)
     try:
-        chroma_client = chromadb.PersistentClient(path="./chroma_db")
+        chroma_client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
         chroma_client.delete_collection(name=f"workspace_{str(workspace.id).replace('-', '_')}")
     except Exception:
         pass  # If vector index cleanup fails or is empty, skip quietly
@@ -347,3 +348,4 @@ def read_root():
 app.include_router(chat_router)
 app.include_router(research_desk_router)
 app.include_router(auth_router)
+app.include_router(services_router)

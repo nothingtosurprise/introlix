@@ -42,6 +42,7 @@ import json
 from datetime import datetime
 import logging
 from typing import List, Dict, Any
+from types import GeneratorType
 from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from fastapi.responses import StreamingResponse
 from httpcore import request
@@ -250,19 +251,26 @@ async def setup_research_desk_context_agent(
 
         context_agent = ContextAgent(config=config, conversation_history=conv_history, model=model)
 
-        output = await context_agent.process(
+        raw_output = await context_agent.process(
             query=request.prompt,
             answers=request.answers,
             research_scope=request.research_scope,
             user_files=request.user_files,
         )
+
+        if isinstance(raw_output, GeneratorType):
+            for update in raw_output:
+                output = update
+        else:
+            output = raw_output
+
+        print(f"/n/n/n{output}/n/n/n")
     except Exception as e:
         logger.error(f"Context agent failed for research desk {desk_id}: {e}")
         raise HTTPException(status_code=500, detail="Context agent processing failed")
 
     # Determine next state
     next_state = "planner_agent" if output.move_next and output.confidence_level > 0.7 and output.final_prompt else "context_agent"
-
     # Updating the conv_history list primitives
     conv_history.append({
         "role": "user",
@@ -795,13 +803,7 @@ async def chat(
     async def stream():
         assistant_content = ""
         async for chunk in chat_agent.arun(request.prompt):
-            try:
-                event = json.loads(chunk)
-                if event.get("type") == "answer_chunk":
-                    assistant_content += event.get("content", "")
-            except json.JSONDecodeError:
-                # Treat the chunk as plain text if it's not valid JSON
-                assistant_content += chunk
+            assistant_content += chunk
             yield chunk
 
         # Spawn a localized background connection task loop to write trailing response data

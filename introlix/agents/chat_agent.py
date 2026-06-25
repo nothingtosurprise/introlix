@@ -9,7 +9,7 @@ internet search capabilities. The agent can:
 - Always stream responses in real-time
 - Iterate through multiple tool-call rounds (up to max_iterations)
 
-The ChatAgent passes tool definitions directly to the LLM API (AI Studio / OpenRouter),
+The ChatAgent passes tool definitions directly to the LLM API (AI Studio / OpenRouter / LLAMA-CPP),
 receives native tool-call events from the stream, executes the requested tools, then
 feeds results back into the conversation for the next iteration — all while streaming
 the final answer to the caller.
@@ -18,11 +18,9 @@ the final answer to the caller.
 import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any, AsyncGenerator
-from pydantic import BaseModel, Field
 
 from introlix.agents.baseclass import AgentInput, BaseAgent, PromptTemplate, Tool
 from introlix.agents.explorer_agent import ExplorerAgent
-from introlix.llm_config import cloud_llm_manager
 from introlix.prompts import chat_agent_prompt
 from introlix.tools.tool_def import SEARCH_TOOL_DEF, FAST_SEARCH_TOOL_DEF
 from ddgs import DDGS
@@ -34,8 +32,7 @@ class ChatAgent(BaseAgent):
     """
     An agent designed for conversational interactions with search capabilities.
 
-    Uses native LLM tool-calling (passed via API) rather than embedding tool
-    descriptions in the system prompt. Always streams responses. Supports
+    Uses native LLM tool-calling. Always streams responses. Supports
     multi-turn iteration: tool call → execute → feed result back → repeat.
 
     Attributes:
@@ -115,7 +112,9 @@ class ChatAgent(BaseAgent):
                 max_results=5,
             )
 
-            return "\n\n---\n\n".join(str(results))
+            clean_results = [r.chunk_text for r in results if hasattr(r, 'chunk_text')]
+
+            return " ".join(clean_results)
 
         return [
             Tool(name="search", description="Deep internet search.", function=search),
@@ -129,16 +128,6 @@ class ChatAgent(BaseAgent):
     async def arun(self, user_prompt: str) -> AsyncGenerator[str, None]:
         """
         Runs the agent asynchronously with native tool-calling and always-on streaming.
-
-        Flow:
-        1. Build messages (system + conversation history + current user query).
-        2. Call LLM with tools passed via API, stream=True always.
-        3. Stream answer chunks directly to caller.
-        4. Collect any tool_call events from the stream.
-        5. Execute all requested tools.
-        6. Append tool results to messages, yield tool status events to caller.
-        7. Loop back to step 2 (up to max_iterations).
-        8. If no tool calls in an iteration, answer is already streamed — done.
 
         Args:
             user_prompt (str): The user's input query.
@@ -171,10 +160,10 @@ class ChatAgent(BaseAgent):
         messages.append({"role": "user", "content": user_prompt})
 
         for _ in range(self.max_iterations):
-            stream = await cloud_llm_manager(
-                model_name=self.model,
-                provider=self.CLOUD_PROVIDER,
+            stream = await self._call_llm_with_messages(
                 messages=messages,
+                cloud=True if self.CLOUD_PROVIDER else False,
+                stream=True,
                 tools=ALL_TOOL_DEFS,
             )
 
@@ -224,8 +213,8 @@ class ChatAgent(BaseAgent):
                 "count": len(tool_names),
             }) + "\n"
 
-            # Add assistant message with tool call intent (for providers that need it)
-            assistant_content = []
+            # Need to structure this specifically for Google AI Studio, mapping out the model's "thought" blocks and tool execution steps.
+            assistant_content = [] 
             if thinking_text_parts:
                 assistant_content.append({
                     "type": "thought",
@@ -284,6 +273,11 @@ class ChatAgent(BaseAgent):
                 try:
                     result = await tool_obj.execute(tool_args)
                     result_str = str(result)
+                    stitched = result_str.replace('\n', '')
+                    stitched = stitched.replace('\xa0', ' ') # Clean up the weird non-breaking space blocks
+                    cleaned_result_str = " ".join(stitched.split())
+
+
                     yield json.dumps({
                         "type": "tool_result",
                         "tool": tool_name,
@@ -293,7 +287,7 @@ class ChatAgent(BaseAgent):
                         "role": "tool",
                         "tool_call_id": tc.get("id") or tc["name"],
                         "name": tool_name,
-                        "content": result_str,
+                        "content": cleaned_result_str,
                     })
                 except Exception as e:
                     error_msg = f"Error: {str(e)}"
@@ -312,14 +306,16 @@ class ChatAgent(BaseAgent):
             # Add tool results to messages for the next iteration
             messages.extend(tool_result_messages)
 
-            # Continue to next iteration — LLM will now generate answer with tool results
-
 
 async def main():
-    agent = ChatAgent(unique_id="user2545454", model="gemini-3.1-flash-lite")
+    agent = ChatAgent(unique_id="user2545454", model="gemma-4-E2B-it-Q4_K_M.gguf")
+    while True:
+        prompt = input("You: ")
+        if prompt.lower() in ["exit", "quit"]:
+            break
 
-    async for chunk in agent.arun("Who is leader of USA use the search tool not fast search this time"):
-        print(chunk, end="", flush=True)
+        async for chunk in agent.arun(prompt):
+            print(chunk, end="", flush=True)
 
 
 if __name__ == "__main__":

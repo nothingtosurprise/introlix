@@ -232,12 +232,18 @@ class EditAgent(BaseAgent):
         )
 
         for _ in range(self.max_iterations):
-            stream = await cloud_llm_manager(
-                model_name=self.model,
-                provider=self.CLOUD_PROVIDER,
+            stream = await self._call_llm_with_messages(
                 messages=messages,
+                cloud=True if self.CLOUD_PROVIDER else False,
+                stream=True,
                 tools=self.EDIT_TOOL_DEFS,
             )
+            # stream = await cloud_llm_manager(
+            #     model_name=self.model,
+            #     provider=self.CLOUD_PROVIDER,
+            #     messages=messages,
+            #     tools=self.EDIT_TOOL_DEFS,
+            # )
 
             pending_tool_calls: List[Dict[str, Any]] = []
             assistant_text_parts: List[str] = []

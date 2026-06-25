@@ -33,7 +33,6 @@ classifiers = [
 dependencies = [
     "python-dotenv>=1.2.2",
     "requests>=2.34.2",
-    "llama-cpp-python>=0.3.26",
     "feedparser>=6.0.12",
     "beautifulsoup4>=4.14.3",
     "platformdirs>=4.10.0",
@@ -54,6 +53,7 @@ dependencies = [
     "bcrypt>=5.0.0",
     "aiosqlite>=0.22.1",
     "chromadb>=1.5.9",
+    "psutil>=7.2.2",
 ]
 [tool.setuptools.packages.find]
 include = ["introlix*"]

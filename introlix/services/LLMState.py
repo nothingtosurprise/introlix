@@ -27,11 +27,23 @@ import asyncio
 import gc
 import json
 import httpx
+import subprocess
 from fastapi import HTTPException
-from typing import Optional, AsyncGenerator, Union, List, Dict, Any, TYPE_CHECKING
+from typing import Optional, AsyncGenerator, List, Dict, Any, TYPE_CHECKING
 from google import genai
 from google.genai import types
-from introlix.config import MODEL_SAVE_DIR, OPEN_ROUTER_KEY, GEMINI_API_KEY
+from introlix.config import (
+    MODEL_SAVE_DIR,
+    OPEN_ROUTER_KEY,
+    GEMINI_API_KEY,
+    LLAMA_CPP_PATH,
+    LLAMA_SERVER_PATH,
+    LLAMA_SERVER_PORT,
+    LLAMA_CPP_CTX, 
+    LLAMA_CPP_N_GPU_LAYERS, 
+    PHYSICAL_CORES,
+    N_SERVER_SLOTS
+)
 
 if TYPE_CHECKING:
     from llama_cpp import Llama
@@ -57,20 +69,19 @@ class LLMState:
         """
         Initialize the LLM state manager.
         """
-        self.llm: Optional["Llama"] = None
+        self.llm: Optional[subprocess.Popen] = None
         self.current_model_name: Optional[str] = None
         self.lock = asyncio.Lock()
 
     async def load_model(
-        self, model_name: str, n_ctx: int = 2048, n_gpu_layers: int = 0
+        self, model_name: str, n_gpu_layers: Optional[int] = None
     ):
         """
         Load a local llama.cpp model from disk.
 
         Args:
             model_name (str): Name of the model file (must be in MODEL_SAVE_DIR).
-            n_ctx (int): Context window size. Defaults to 2048.
-            n_gpu_layers (int): Number of layers to offload to GPU. 0 = CPU only. Defaults to 0.
+            n_gpu_layers (Optional[int]): Number of layers to offload to GPU. 0 = CPU only. Defaults to None (uses config/env).
 
         Returns:
             dict: Status message and model name.
@@ -83,44 +94,110 @@ class LLMState:
         model_path = os.path.join(MODEL_SAVE_DIR, model_name)
 
         if not os.path.basename(model_name) == model_name:
+            print(f"Invalid model name: {model_name} of {os.path.basename(model_name)}")
             raise HTTPException(status_code=400, detail="Invalid model name")
         if not os.path.exists(model_path):
             raise HTTPException(
                 status_code=404, detail=f"Model file {model_name} not found"
             )
 
-        if self.current_model_name == model_name:
-            return {"status": "Model already loaded", "model_name": model_name}
+        if n_gpu_layers is None:
+            n_gpu_layers = LLAMA_CPP_N_GPU_LAYERS
 
         async with self.lock:
+            if self.current_model_name == model_name and self.llm is not None:
+                # Double check that the process is actually still alive
+                if self.llm.poll() is None:
+                    return {"status": "Model already loaded", "model_name": model_name}
+                else:
+                    self.llm = None
+                    self.current_model_name = None
+
+            # Shut it down if a different model is running or if the model crashed
             if self.llm is not None:
-                del self.llm
+                try:
+                    if self.llm.poll() is None:
+                        self.llm.terminate()
+                        self.llm.wait()
+                except OSError:
+                    pass
                 self.llm = None
                 self.current_model_name = None
-                gc.collect()
-                if n_gpu_layers > 0:
-                    import torch
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
 
-            try:
-                from llama_cpp import Llama
-            except ImportError:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Local llama.cpp support is unavailable in this deployment."
-                )
+            self._kill_process_on_port(LLAMA_SERVER_PORT)
 
-            try:
-                self.llm = Llama(
-                    model_path=model_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers
+            current_gpu_layers = n_gpu_layers
+            attempts = [current_gpu_layers]
+            if current_gpu_layers > 0:
+                attempts.append(0)
+
+            last_error_detail = ""
+            for attempt_gpu_layers in attempts:
+                command = [
+                    LLAMA_SERVER_PATH,
+                    "-m", model_path,
+                    "--port", str(LLAMA_SERVER_PORT),
+                    "-ngl", str(attempt_gpu_layers),
+                    "-c", str(LLAMA_CPP_CTX),
+                    "-t", str(PHYSICAL_CORES),
+                    "-np", str(N_SERVER_SLOTS),
+                    "--threads-batch", str(PHYSICAL_CORES)
+                ]
+                try:
+                    self.llm = subprocess.Popen(command, cwd=LLAMA_CPP_PATH)
+                    self.current_model_name = model_name
+                except Exception as e:
+                    last_error_detail = f"Failed to start local llama server process: {str(e)}"
+                    self.llm = None
+                    self.current_model_name = None
+                    continue
+
+                # Wait for llama-server to be ready
+                is_ready = False
+                for _ in range(15):
+                    await asyncio.sleep(1.0)
+                    if self.llm.poll() is not None:
+                        # Process died on startup!
+                        return_code = self.llm.returncode
+                        last_error_detail = f"Local llama server terminated immediately with exit code {return_code}."
+                        self.llm = None
+                        self.current_model_name = None
+                        break  # Break out of the 15-second readiness loop to try next attempt
+                    
+                    # Try calling the health endpoint
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            response = await client.get(f"http://localhost:{LLAMA_SERVER_PORT}/health", timeout=1.0)
+                            if response.status_code == 200:
+                                is_ready = True
+                                break
+                    except httpx.HTTPError:
+                        pass
+
+                if is_ready:
+                    # Started Successfully
+                    if attempt_gpu_layers == 0 and current_gpu_layers > 0:
+                        print("WARNING: GPU/Vulkan loading failed. Fell back to CPU-only execution (n_gpu_layers=0).")
+                    return {"status": "Model Running", "model_name": model_name}
+                else:
+                    if self.llm:
+                        try:
+                            if self.llm.poll() is None:
+                                self.llm.terminate()
+                                self.llm.wait()
+                        except OSError:
+                            pass
+                        self.llm = None
+                        self.current_model_name = None
+                    if not last_error_detail:
+                        last_error_detail = "Server timed out on startup."
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Local llama server failed to start: {last_error_detail} "
                 )
-                self.current_model_name = model_name
-                return {"status": "Model loaded", "model_name": model_name}
-            except Exception as e:
-                raise HTTPException(
-                    status_code=500, detail=f"Error loading model: {str(e)}"
-                )
+            )
 
     async def get_ai_studio(
         self,
@@ -426,13 +503,12 @@ class LLMState:
         async with self.lock:
             if self.llm is None:
                 return {"status": "No model loaded"}
-            del self.llm
+            self.llm.terminate()
+            self.llm.wait()
             self.llm = None
             self.current_model_name = None
             gc.collect()
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+
             return {"status": "Model unloaded"}
 
     def get_llm(self):
@@ -448,3 +524,32 @@ class LLMState:
         if self.llm is None:
             raise HTTPException(status_code=500, detail="No model loaded")
         return self.llm
+
+    def _kill_process_on_port(self, port: int):
+        """Find and kill any process listening on the specified TCP port."""
+        try:
+            import os
+            import subprocess
+            # Use lsof to get the PID listening on the port
+            output = subprocess.check_output(
+                ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
+                stderr=subprocess.DEVNULL
+            )
+            pids = [int(pid) for pid in output.decode().strip().split("\n") if pid.strip()]
+            for pid in pids:
+                try:
+                    os.kill(pid, 9)
+                    print(f"Killed orphaned process {pid} listening on port {port}")
+                except OSError:
+                    pass
+        except Exception:
+            # Fallback to fuser if lsof fails or isn't available
+            try:
+                import subprocess
+                subprocess.run(
+                    ["fuser", "-k", "-n", "tcp", str(port)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                pass

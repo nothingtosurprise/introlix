@@ -3,43 +3,6 @@ The Explorer Agent retrieves and analyzes information from the internet using
 SearXNG search and web crawling. It operates on multiple topics in parallel,
 stores content in a vector database, and generates structured summaries for
 efficient downstream processing.
-
-Input Format:
-==============================================================================
-QUERIES: <list of search queries or research topics>
-UNIQUE_ID: <workspace identifier for data isolation>
-GET_ANSWER: <true | false - whether to generate summary answers>
-MAX_RESULTS: <maximum number of search results per query>
-MODEL: <LLM model identifier for content analysis>
-==============================================================================
-
-Output Format:
-==============================================================================
-EXPLORER_OUTPUT: [{
-    "title": ["<webpage title 1>", "<webpage title 2>"],
-    "description": ["<webpage description 1>", "<webpage description 2>"],
-    "url": "<url>",
-    "chunk_text": "<detailed summary of content relevant to the topic>",
-    "score": <0.0-1.0 score indicating content relevance>,
-}[]
-==============================================================================
-
-Workflow:
----------
-1. Search for relevant URLs using SearXNG
-2. Crawl and extract content from web pages in parallel
-3. Chunk content with semantic similarity filtering (threshold: 0.35)
-4. Store chunks in Chromadb vector database with workspace isolation
-5. Retrieve relevant chunks
-6. Retry failed queries up to max_retries times
-
-Notes:
-------
-- Uses Chromadb for vector storage with workspace (unique_id) isolation
-- Processes queries in batches of 5 to avoid search tool timeouts
-- Implements semantic similarity filtering to store only relevant chunks
-- Automatically retries queries that don't find sufficient data
-- Embedding model: all-MiniLM-L6-v2
 """
 
 import asyncio
@@ -48,7 +11,7 @@ import hashlib
 from typing import List, Union
 from pydantic import BaseModel, Field
 import chromadb
-from introlix.config import MIN_RELEVANCE_SCORE
+from introlix.config import MIN_RELEVANCE_SCORE, CHROMA_DB_DIR, CHUNK_SIZE, CHUNK_OVERLAP_SIZE
 from introlix.tools.web_crawler import web_crawler, ScrapeResult
 from introlix.tools.web_search import SearXNGClient, duckduckgo_search
 from introlix.utils.text_chunker import TextChunker
@@ -66,9 +29,9 @@ class ExplorerAgentOutput(BaseModel):
 
 class ExplorerAgent:
     def __init__(self):
-        self.chroma_client = chromadb.PersistentClient(path="./chroma_db")
+        self.chroma_client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
         self.embedding_model = app_state.embedding_model or SentenceTransformer(
-            "all-MiniLM-L6-v2"
+            "all-MiniLM-L6-v2", local_files_only=True
         )
         self.MAX_CONCURRENT_URLS = 30
 
@@ -337,7 +300,7 @@ class ExplorerAgent:
             if isinstance(crawled_result, str):
                 return []
 
-            chunker = TextChunker(chunk_size=400, overlap=50)
+            chunker = TextChunker(chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP_SIZE)
             chunks = chunker.chunk_text(
                 crawled_result.text
                 if isinstance(crawled_result, ScrapeResult)
