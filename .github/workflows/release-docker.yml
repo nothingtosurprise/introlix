@@ -75,6 +75,14 @@ jobs:
             ## Introlix Local Docker Release
             
             This release contains the packaged Docker image for running Introlix locally with both frontend and backend integrated.
+
+            ### Changes: 
+
+            1. From llama-cpp-python to llama-cpp build directly
+            2. Auto download llama-cpp when user try to download local model from UI
+            3. Support for UI to download models and llama-cpp
+            4. Uses less tokens used as well as thinking are shown in UI
+            5. Other bug fixes...
             
             ### Run with Docker Compose (Recommended)
             
