@@ -26,40 +26,28 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Upgrade pip and packaging tools
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install CPU-only PyTorch to prevent downloading giant CUDA-enabled packages (>2.5 GB)
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-
-# Copy backend dependencies
 COPY pyproject.toml /app/
-RUN sed '/llama-cpp-python/d' pyproject.toml > pyproject.tmp \
-    && mv pyproject.tmp pyproject.toml \
-    && pip install --no-cache-dir . \
+RUN pip install --no-cache-dir . \
     && python -m playwright install chromium
 
-# Copy frontend dependency locks and install frontend dependencies
 COPY web/package.json web/pnpm-lock.yaml* web/package-lock.json* /app/web/
 WORKDIR /app/web
 RUN pnpm install --frozen-lockfile || pnpm install
 
-# Copy all repository files (excluding those in Dockerfile.local.dockerignore)
 WORKDIR /app
 COPY . /app
 
-# Build the frontend next.js website, then prune devDependencies and clean store/caches
 WORKDIR /app/web
 RUN pnpm build \
     && pnpm prune --prod \
     && pnpm store prune \
     && npm cache clean --force
 
-# Go back to /app
 WORKDIR /app
 
 # Make the startup script executable
 RUN chmod +x /app/start.sh
 
-# Expose ports for backend (8042) and frontend (8043)
 EXPOSE 8042 8043
 
-# Start backend and frontend
 CMD ["/app/start.sh"]
