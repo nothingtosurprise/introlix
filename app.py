@@ -27,7 +27,7 @@ from sentence_transformers import SentenceTransformer
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # adding embedding model and pinecone client to app state
-    app_state.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    app_state.embedding_model = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
     await init_db()
 
     # explorer agent setup
