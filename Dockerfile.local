@@ -30,7 +30,7 @@ RUN pip install --no-cache-dir . \
 
 COPY web/package.json web/pnpm-lock.yaml* web/package-lock.json* /app/web/
 WORKDIR /app/web
-RUN printf 'onlyBuiltDependencies:\n  - sharp\n  - unrs-resolver\n' > pnpm-workspace.yaml \
+RUN echo "onlyBuiltDependencies:\n  - sharp\n  - unrs-resolver" > pnpm-workspace.yaml \
     && (pnpm install --frozen-lockfile || pnpm install)
 
 WORKDIR /app
