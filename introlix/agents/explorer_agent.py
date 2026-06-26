@@ -31,7 +31,7 @@ class ExplorerAgent:
     def __init__(self):
         self.chroma_client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
         self.embedding_model = app_state.embedding_model or SentenceTransformer(
-            "all-MiniLM-L6-v2", local_files_only=True
+            "all-MiniLM-L6-v2"
         )
         self.MAX_CONCURRENT_URLS = 30
 
