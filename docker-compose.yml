@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   introlix:
     image: ghcr.io/introlix/introlix-app:latest
@@ -10,3 +8,8 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    volumes:
+      - introlix-data:/root/.local/share/introlix
+
+volumes:
+  introlix-data:
