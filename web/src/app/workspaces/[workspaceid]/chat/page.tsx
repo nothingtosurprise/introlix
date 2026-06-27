@@ -33,7 +33,7 @@ export default function WorkspaceChatPage() {
       router.push(
         `/workspaces/${workspaceId}/chat/${result._id}?prompt=${encodeURIComponent(
           data.prompt
-        )}`
+        )}&model=${encodeURIComponent(data.model)}`
       );
     } catch (error) {
       console.error("Failed to create chat:", error);

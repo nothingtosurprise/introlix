@@ -15,9 +15,10 @@ interface ChatPageProps {
     workspaceId: string;
     chatId: string;
     initialPrompt?: string;
+    initialModel?: string;
 }
 
-export default function ChatPage({ workspaceId, chatId, initialPrompt }: ChatPageProps) {
+export default function ChatPage({ workspaceId, chatId, initialPrompt, initialModel }: ChatPageProps) {
     const { data: chat, isLoading: chatLoading, error: chatError } = useChat(workspaceId, chatId);
     const { data: workspace } = useWorkspace(workspaceId);
     const queryClient = useQueryClient();
@@ -89,7 +90,7 @@ export default function ChatPage({ workspaceId, chatId, initialPrompt }: ChatPag
     const submitInitialPrompt = async () => {
         await handleSendMessage({
             prompt: initialPrompt,
-            model: "auto",
+            model: initialModel || "auto",
             search: false,
             agent: "",
             files: [],

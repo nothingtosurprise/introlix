@@ -11,8 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useModelsList } from "@/hooks/use-chat";
 
-type ModelType = "auto" | "gpt-5" | "claude-sonnet-4" | "deepseek/deepseek-v3.2-exp" | "google/gemini-2.5-pro";
 type ResearchScope = "narrow" | "medium" | "comprehensive";
 
 interface ChatInputProps {
@@ -25,30 +25,35 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
-const MODEL_DISPLAY: Record<ModelType, string> = {
-  "auto": "Auto",
-  "gpt-5": "GPT-5",
-  "claude-sonnet-4": "Claude Sonnet 4",
-  "deepseek/deepseek-v3.2-exp": "Deepseek",
-  "google/gemini-2.5-pro": "Gemini 2.5 Pro",
-};
-
 const RESEARCH_SCOPE_DISPLAY: Record<Exclude<ResearchScope, null>, string> = {
   "narrow": "Narrow",
   "medium": "Medium",
   "comprehensive": "Comprehensive",
 };
 
+const MODEL_DISPLAY: Record<string, string> = {
+  "auto": "Auto",
+};
+
 export default function ContextInput({ onSubmit, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [isComposing, setIsComposing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<ModelType>("auto");
+  const [selectedModel, setSelectedModel] = useState<string>("auto");
   const [selectedScope, setSelectedScope] = useState<ResearchScope>("medium");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const models: ModelType[] = ["auto", "gpt-5", "claude-sonnet-4", "deepseek/deepseek-v3.2-exp", "google/gemini-2.5-pro"];
+  const models_list = useModelsList();
+
+  const models: string[] = ["auto", ...(models_list.data?.map((m) => m.value) ?? [])];
+  // adding models name inside MODEL_DISPLAY if not already present
+  models_list.data?.forEach((model) => {
+    if (!MODEL_DISPLAY[model.value]) {
+      MODEL_DISPLAY[model.value] = model.name;
+    }
+  });
+
   const research_scope: Exclude<ResearchScope, null>[] = [
     "narrow",
     "medium",

@@ -13,9 +13,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useModelsList } from "@/hooks/use-chat";
 
-type AgentType = "verifier" | "knowledge-gap" | "research-assistant" | "code-reviewer" | null;
-
-
 interface ChatInputProps {
   onSubmit: (data: {
     prompt: string;

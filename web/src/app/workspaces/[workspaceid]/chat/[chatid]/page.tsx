@@ -9,12 +9,14 @@ export default function ChatDetailPage() {
   const workspaceId = params.workspaceid as string;
   const chatId = params.chatid as string;
   const initialPrompt = searchParams.get("prompt") || undefined;
+  const initialModel = searchParams.get("model") || undefined;
 
   return (
     <ChatPage 
       workspaceId={workspaceId} 
       chatId={chatId}
       initialPrompt={initialPrompt || undefined}
+      initialModel={initialModel || undefined}
     />
   );
 }
